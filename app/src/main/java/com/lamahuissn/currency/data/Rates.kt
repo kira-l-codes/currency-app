@@ -51,18 +51,24 @@ class RatesClient {
     }
 
     /**
-     * Gold and silver, expressed like every other row: units of metal per 1 USD. A failed metal call
-     * returns an empty map, so an outage hides the metal rows instead of inventing a price.
+     * Gold and silver with the provider's timestamp attached, keyed by code. A failed call is simply
+     * absent from the map, so an outage hides a metal instead of inventing a price.
      */
-    fun metalsPerUsd(): Map<String, Double> {
-        val out = HashMap<String, Double>()
+    fun metalQuotes(): Map<String, Metals.Quote> {
+        val out = HashMap<String, Metals.Quote>(Metals.codes.size)
         for (code in Metals.codes) {
             val body = runCatching { get("https://api.gold-api.com/price/$code") }.getOrNull() ?: continue
-            val ounce = Metals.parseOunceUsd(body) ?: continue
-            out[code] = Metals.perUsd(ounce)
+            val quote = Metals.parseQuote(body) ?: continue
+            out[code] = quote
         }
         return out
     }
+
+    /**
+     * Gold and silver, expressed like every other row: units of metal per 1 USD. A failed metal call
+     * returns an empty map, so an outage hides the metal rows instead of inventing a price.
+     */
+    fun metalsPerUsd(): Map<String, Double> = metalQuotes().mapValues { Metals.perUsd(it.value.ounceUsd) }
 
     /** Daily series of [quote] per 1 [base], from the ECB reference rates. Empty when unpublished. */
     fun fiatHistory(base: String, quote: String, startIso: String, endIso: String): List<Point> {

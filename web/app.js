@@ -7,7 +7,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "web 1.1";
+  const VERSION = "web 1.2";
 
   /* ── catalogue ───────────────────────────────────────────────────────────── */
   const CAT = {
@@ -71,7 +71,7 @@
 
   const state = {
     base:"USD", amount:100,
-    rates:{ ...FALLBACK }, metals:{}, updated:0, live:false,
+    rates:{ ...FALLBACK }, metals:{}, metalMeta:{}, updated:0, live:false,
     order:[...DEFAULT_ORDER], pinned:["LBP"], screen:"convert",
     chart:{ base:"EUR", quote:"USD", period:"3M" },
     count:{ bag:["USD"], counts:{}, expected:null, history:[], collapsed:[] },
@@ -119,6 +119,46 @@
     return p ? value / p : 0;
   };
 
+  /* ── metals: accept a publication, decide a direction, never replay one ──── */
+  const M = window.Motion;
+
+  const quoteOf = (json) => ({ ounceUsd: json.price, atMs: M.parseProviderAt(json.updatedAt) || 0 });
+
+  /**
+   * Folds a fresh read into the state. A publication the page has not seen is accepted, given a
+   * direction against the previous price and a new sequence number; everything else is dropped, so
+   * two polls inside one 30-second publication cost nothing and animate nothing.
+   * Returns the codes that actually changed.
+   */
+  function applyMetals(quotes, receivedAt) {
+    const changed = [];
+    Object.keys(quotes).forEach((code) => {
+      const quote = quotes[code];
+      const previous = state.metalMeta[code];
+      const stamp = quote.atMs > 0 ? quote.atMs : receivedAt;
+      if (!M.accept(quote.ounceUsd, stamp, previous ? previous.atMs : 0)) return;
+      state.metalMeta[code] = {
+        ounceUsd: quote.ounceUsd,
+        atMs: stamp,
+        receivedAt,
+        tick: M.tick(previous ? previous.ounceUsd : null, quote.ounceUsd),
+        seq: (previous ? previous.seq : 0) + 1,
+      };
+      state.metals[code] = quote.ounceUsd;
+      changed.push(code);
+    });
+    return changed;
+  }
+
+  /** LIVE / DELAYED / OFFLINE for the metal feed, from the age of the newest accepted publication. */
+  function metalsFeedState() {
+    const stamps = Object.values(state.metalMeta).map((m) => m.receivedAt);
+    const newest = stamps.length ? Math.max(...stamps) : 0;
+    return M.feedState(stamps.length > 0, M.ageMs(Date.now(), newest));
+  }
+
+  const METALS_LABEL = { live: "live", delayed: "delayed", offline: "offline" };
+
   /* ── expression parser ───────────────────────────────────────────────────── */
   function evaluate(raw) {
     const src = String(raw).replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-").replace(/,/g, "").trim();
@@ -152,8 +192,9 @@
     try {
       localStorage.setItem(STORE, JSON.stringify({
         base: state.base, amount: state.amount, order: state.order, pinned: state.pinned,
-        screen: state.screen, chart: state.chart, count: state.count,
+        screen: state.screen,        chart: state.chart, count: state.count,
         rates: state.rates, metals: state.metals, updated: state.updated,
+        metalMeta: state.metalMeta,
       }));
     } catch (e) { /* private mode: it still works, it just forgets */ }
   }
@@ -178,6 +219,8 @@
       }
       if (s.rates) state.rates = { ...state.rates, ...s.rates };
       if (s.metals) state.metals = s.metals;
+      // A stored publication time lets the first paint say DELAYED instead of pretending.
+      if (s.metalMeta) state.metalMeta = s.metalMeta;
       if (s.updated) state.updated = s.updated;
     } catch (e) { /* a corrupt key must not brick the app */ }
   }
@@ -312,9 +355,15 @@
       : "—";
     // What matters is how old the numbers are, not which browser event fired last.
     $("convertSub").textContent = (fresh ? "Updated " : "Cached ") + when + " · " + state.order.length + " currencies · " + VERSION;
+    const metalFeed = metalsFeedState();
+    const metalText = metalFeed === "live"
+      ? "gold & silver live"
+      : metalFeed === "delayed"
+        ? "gold & silver delayed"
+        : "gold & silver offline";
     $("convertSource").textContent = navigator.onLine === false
-      ? (state.updated ? "Offline · rates from " + new Date(state.updated).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "Offline · built-in reference rates, not live")
-      : "Rates by open.er-api.com · gold by gold-api";
+      ? "Offline · rates from " + new Date(state.updated).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) + " · " + metalText
+      : "Rates by open.er-api.com · " + metalText + " (30 s)";
     const pill = $("countRates");
     pill.classList.toggle("stale", !fresh);
     $("countRatesText").textContent = fresh ? "Rates live" : "Cached " + when;
@@ -334,12 +383,15 @@
         fetch("https://api.gold-api.com/price/XAG", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
       ]);
       if (fiat && fiat.rates) state.rates = { ...state.rates, ...fiat.rates };
-      if (gold && gold.price) state.metals.XAU = gold.price;
-      if (silver && silver.price) state.metals.XAG = silver.price;
+      const quotes = {};
+      if (gold && gold.price > 0) quotes.XAU = quoteOf(gold);
+      if (silver && silver.price > 0) quotes.XAG = quoteOf(silver);
+      const moved = applyMetals(quotes, Date.now());
       state.live = true;
       state.updated = Date.now();
       saveState();
       renderAll();
+      moved.forEach(paintMetalRow);
       if (window.ChartView) window.ChartView.onRates();
     } catch (err) {
       offlineNotice();
@@ -364,8 +416,42 @@
     return [state.base, ...rest];
   }
 
+  /** The flash is a 900 ms window after an accepted publication, never a state that lingers. */
+  function flashActive(code) {
+    const meta = state.metalMeta[code];
+    if (!meta || meta.tick === "flat") return null;
+    return Date.now() - meta.receivedAt <= M.FLASH_MS ? meta : null;
+  }
+
+  const metalPillText = (code) => "$" + money2(perUsd(code) || 0) + " / oz";
+
+  /**
+   * Repaints one metal row in place. A tick must not rebuild the list: sixteen rows of DOM for one
+   * number is exactly the recomposition storm the brief asks us to avoid.
+   */
+  function paintMetalRow(code) {
+    const row = document.querySelector('#list .row[data-code="' + code + '"]');
+    if (!row) return;
+    const wrap = row.querySelector(".pill-wrap");
+    const pill = row.querySelector(".pill-value");
+    const tickEl = row.querySelector(".tick");
+    if (!wrap || !pill) return;
+    pill.textContent = metalPillText(code);
+    const meta = flashActive(code);
+    wrap.classList.remove("flash-up", "flash-down");
+    if (tickEl) {
+      tickEl.textContent = meta ? (meta.tick === "up" ? "▲" : "▼") : "";
+      tickEl.className = "tick" + (meta ? " show " + meta.tick : "");
+    }
+    if (meta) {
+      void wrap.offsetWidth;                    // restart the CSS animation on a fresh move
+      wrap.classList.add(meta.tick === "up" ? "flash-up" : "flash-down");
+    }
+  }
+
   function rowFor(code) {
     const li = el("li", "row");
+    li.dataset.code = code;
     if (code === state.base) li.classList.add("base");
     if (code === "XAU" || code === "XAG") li.classList.add("metal");
     li.appendChild(badgeFor(code));
@@ -389,7 +475,18 @@
     } else {
       value.textContent = "—";
     }
-    li.appendChild(value);
+    // The arrow floats in the gap before the pill, so no row ever changes width when a price moves.
+    const wrap = el("div", "pill-wrap");
+    wrap.appendChild(el("span", "tick"));
+    wrap.appendChild(value);
+    const meta = flashActive(code);
+    if (meta) {
+      wrap.classList.add(meta.tick === "up" ? "flash-up" : "flash-down");
+      const tickEl = wrap.querySelector(".tick");
+      tickEl.textContent = meta.tick === "up" ? "▲" : "▼";
+      tickEl.className = "tick show " + meta.tick;
+    }
+    li.appendChild(wrap);
 
     li.addEventListener("click", () => {
       if (code === state.base) { openAmountSheet(); return; }
@@ -511,8 +608,47 @@
 
   window.addEventListener("online", () => { toast("Back online"); loadRates(); });
   window.addEventListener("offline", () => { paintStatus(); toast("Offline · last known rates"); });
+  /**
+   * Metals only, on the provider's own clock: gold-api publishes once every 30 s, so polling faster
+   * reads the same number and polling at all in a hidden tab is battery for nothing.
+   */
+  let metalsTimer = null;
+  async function refreshMetals() {
+    if (navigator.onLine === false) return;
+    try {
+      const [gold, silver] = await Promise.all([
+        fetch("https://api.gold-api.com/price/XAU", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+        fetch("https://api.gold-api.com/price/XAG", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+      ]);
+      const quotes = {};
+      if (gold && gold.price > 0) quotes.XAU = quoteOf(gold);
+      if (silver && silver.price > 0) quotes.XAG = quoteOf(silver);
+      const moved = applyMetals(quotes, Date.now());
+      if (moved.length) {
+        saveState();
+        moved.forEach(paintMetalRow);
+        paintStatus();
+      }
+    } catch (err) { /* a blink leaves the last price and its age alone */ }
+  }
+
+  function startMetalsLoop() {
+    stopMetalsLoop();
+    metalsTimer = setInterval(() => { if (!document.hidden) refreshMetals(); }, M.PROVIDER_PERIOD_MS);
+  }
+  function stopMetalsLoop() {
+    if (metalsTimer) clearInterval(metalsTimer);
+    metalsTimer = null;
+  }
+
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && Date.now() - state.updated > 5 * 60 * 1000) loadRates();
+    if (document.hidden) {
+      stopMetalsLoop();
+      return;
+    }
+    refreshMetals();
+    startMetalsLoop();
+    if (Date.now() - state.updated > 5 * 60 * 1000) loadRates();
   });
 
   if ("serviceWorker" in navigator) {
@@ -529,12 +665,15 @@
     state, CAT, DENOMS, FLAG, VERSION, flagOf, nameOf, symOf,    money, money2, whole, signed, signedWhole,
     perUsd, convert, toUsd, evaluate, toast, saveState, setScreen,
     sheetOpen, sheetClose, openKeypad, openPicker, renderAll, renderList, loadRates,
+    // Exposed for the ticker's own use and for the browser checks that drive a price move.
+    applyMetals, paintMetalRow, metalsFeedState,
   };
 
   loadState();
   renderAll();
   setScreen(state.screen || "convert");
   loadRates();
+  startMetalsLoop();
 })();
 /* Chart — daily ECB reference rates, laid out like the app's own chart screen.
  *

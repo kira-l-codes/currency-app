@@ -5,6 +5,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
@@ -67,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import com.lamahuissn.currency.data.GestureAxis
 import com.lamahuissn.currency.data.GestureRules
 import com.lamahuissn.currency.data.Metals
+import com.lamahuissn.currency.data.Tick
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -109,11 +111,34 @@ fun FlagDot(flag: String, code: String, size: Dp = 36.dp) {
  * figure that changes rolls to its new value instead of snapping: the numbers are the app.
  */
 @Composable
-fun ValueBadge(text: String, solid: Boolean) {
+fun ValueBadge(
+    text: String,
+    solid: Boolean,
+    /**
+     * Non-null for the second or so after a metal price actually moved: the pill tints toward this
+     * colour and eases back to its own. Null means "steady", and nothing animates.
+     */
+    flash: Color? = null,
+) {
+    val resting = if (solid) Ink.Green else Ink.GreenDeep
+    val background by animateColorAsState(
+        targetValue = flash ?: resting,
+        animationSpec = tween(if (flash != null) 140 else 620),
+        label = "badgeBg",
+    )
+    val label by animateColorAsState(
+        targetValue = when {
+            solid -> Color.White
+            flash != null -> Color.White
+            else -> Ink.Green
+        },
+        animationSpec = tween(if (flash != null) 140 else 620),
+        label = "badgeInk",
+    )
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(if (solid) Ink.Green else Ink.GreenDeep)
+            .background(background)
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
         AnimatedContent(
@@ -126,7 +151,7 @@ fun ValueBadge(text: String, solid: Boolean) {
         ) { shown ->
             Text(
                 text = shown,
-                color = if (solid) Color.White else Ink.Green,
+                color = label,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -179,6 +204,10 @@ fun CurrencyRow(
     modifier: Modifier = Modifier,
     pinned: Boolean = false,
     handle: Boolean = false,
+    /** Tint applied for the length of a price flash; null leaves the badge exactly as it was. */
+    flash: Color? = null,
+    /** Which arrow to draw in the gap before the badge. [Tick.Flat] draws nothing. */
+    tick: Tick = Tick.Flat,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
@@ -216,7 +245,8 @@ fun CurrencyRow(
             Spacer(Modifier.height(2.dp))
             Text(code.uppercase(), color = Ink.Muted, fontSize = 12.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.6.sp)
         }
-        Spacer(Modifier.width(8.dp))
+        TickArrow(tick = tick)
+        Spacer(Modifier.width(3.dp))
         if (handle) {
             Icon(
                 imageVector = Icons.Rounded.DragHandle,
@@ -227,8 +257,33 @@ fun CurrencyRow(
         } else if (badge == null) {
             ShimmerBadge()
         } else {
-            ValueBadge(text = badge, solid = solid)
+            ValueBadge(text = badge, solid = solid, flash = flash)
         }
+    }
+}
+
+/**
+ * A 7×8 dp triangle in the gap before the badge: up for a rise, down for a fall, nothing at rest.
+ * It occupies space that is already empty, which is the only way an indicator cannot shift a row.
+ */
+@Composable
+private fun TickArrow(tick: Tick) {
+    val alpha by animateFloatAsState(
+        targetValue = if (tick == Tick.Flat) 0f else 1f,
+        animationSpec = tween(if (tick == Tick.Flat) 320 else 90),
+        label = "tickArrow",
+    )
+    Canvas(Modifier.size(width = 7.dp, height = 8.dp)) {
+        if (alpha <= 0.01f) return@Canvas
+        val path = Path().apply {
+            if (tick == Tick.Down) {
+                moveTo(0f, 0f); lineTo(size.width, 0f); lineTo(size.width / 2f, size.height)
+            } else {
+                moveTo(size.width / 2f, 0f); lineTo(size.width, size.height); lineTo(0f, size.height)
+            }
+            close()
+        }
+        drawPath(path, color = if (tick == Tick.Up) Ink.Green else Ink.Red, alpha = alpha)
     }
 }
 

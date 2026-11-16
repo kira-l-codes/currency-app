@@ -1,6 +1,14 @@
 package com.lamahuissn.currency.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.lamahuissn.currency.data.PriceMotion
+import com.lamahuissn.currency.data.Tick
+import kotlinx.coroutines.delay
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -276,6 +284,25 @@ fun ConvertScreen(
                             val currency = CurrencyCatalog.of(code)
                             val converted = state.converted(code)
                             val pinned = state.pinned.contains(code)
+                            // A metal flashes for the second after a real publication moved it.
+                            // Keyed on the sequence number, so an unchanged price never re-plays.
+                            val motion = state.metalMotion[code]
+                            var flashing by remember(motion?.seq) { mutableStateOf(false) }
+                            LaunchedEffect(motion?.seq) {
+                                val tick = motion?.tick ?: Tick.Flat
+                                if (tick == Tick.Flat) return@LaunchedEffect
+                                flashing = true
+                                delay(PriceMotion.FLASH_MS)
+                                flashing = false
+                            }
+                            val flash = when {
+                                !flashing -> null
+                                motion?.tick == Tick.Up -> FlashUp
+                                motion?.tick == Tick.Down -> FlashDown
+                                else -> null
+                            }
+                            val arrow = if (flashing) motion?.tick ?: Tick.Flat else Tick.Flat
+
                             val badge = when {
                                 // A metal is quoted by the ounce, so the row shows its price rather
                                 // than "1 USD = 0.000248 gold".
@@ -300,6 +327,8 @@ fun ConvertScreen(
                                     badge = badge,
                                     solid = false,
                                     pinned = pinned,
+                                    flash = flash,
+                                    tick = arrow,
                                     // The tap belongs to the swipe container, so a drag never opens it.
                                     onClick = { },
                                 )
@@ -407,6 +436,11 @@ private fun statusLine(state: ConvertUi): String = when {
     }
     else -> "Rates load from open.er-api.com and CoinGecko"
 }
+
+/** The two tints a moving metal pill passes through. They are backgrounds, not fills, so the
+ *  price never loses contrast at the moment you are trying to read it. */
+private val FlashUp = androidx.compose.ui.graphics.Color(0xFF0F6B33)
+private val FlashDown = androidx.compose.ui.graphics.Color(0xFF6E1D18)
 
 /** A small scrim sheet for the list commands, so the header stays one pill wide. */
 @Composable

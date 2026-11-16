@@ -28,10 +28,22 @@ object Metals {
         else -> code
     }
 
+    /** A publication from the feed: the ounce price and the provider's own timestamp for it. */
+    data class Quote(val ounceUsd: Double, val atMs: Long)
+
     /** `{"price":4037.8,...}` → 4037.8. Anything else returns null, never zero. */
-    fun parseOunceUsd(body: String): Double? = runCatching {
-        val price = JSONObject(body).optDouble("price", 0.0)
-        if (price > 0.0) price else null
+    fun parseOunceUsd(body: String): Double? = parseQuote(body)?.ounceUsd
+
+    /**
+     * The whole publication, timestamp included. The timestamp is what makes the animation honest:
+     * two polls inside one 30-second publication return the same figure and the same `updatedAt`, and
+     * that pair must not light the row up.
+     */
+    fun parseQuote(body: String): Quote? = runCatching {
+        val json = JSONObject(body)
+        val price = json.optDouble("price", 0.0)
+        if (price <= 0.0 || !price.isFinite()) return null
+        Quote(ounceUsd = price, atMs = PriceMotion.parseProviderAt(json.optString("updatedAt")) ?: 0L)
     }.getOrNull()
 
     /** Units of metal per 1 USD — how the app's one table stores an ounce price. */

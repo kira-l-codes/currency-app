@@ -27,6 +27,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      # The price-motion rules ship to the browser and are asserted here before anything deploys.
+      - name: Price motion rules
+        run: node --test web/tests/motion.test.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

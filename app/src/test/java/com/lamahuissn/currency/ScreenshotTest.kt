@@ -10,10 +10,12 @@ import androidx.test.core.app.ApplicationProvider
 import com.lamahuissn.currency.data.CountCodec
 import com.lamahuissn.currency.data.CountState
 import com.lamahuissn.currency.data.Metals
+import com.lamahuissn.currency.data.Tick
 import com.lamahuissn.currency.ui.ChartScreen
 import com.lamahuissn.currency.ui.ChartUi
 import com.lamahuissn.currency.ui.ConvertScreen
 import com.lamahuissn.currency.ui.ConvertUi
+import com.lamahuissn.currency.ui.MetalMotion
 import com.lamahuissn.currency.ui.CountScreen
 import com.lamahuissn.currency.ui.CurrencyTheme
 import com.lamahuissn.currency.ui.KeypadSheet
@@ -49,9 +51,9 @@ class ScreenshotTest {
     private val output: File
         get() = File(System.getProperty("screens.dir") ?: "build/outputs/screens").apply { mkdirs() }
 
-    private fun shoot(name: String) {
+    private fun shoot(name: String, settleMs: Long = 1_500) {
         // Let the entrance animations settle before the frame is taken.
-        compose.mainClock.advanceTimeBy(1_500)
+        compose.mainClock.advanceTimeBy(settleMs)
         val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
         FileOutputStream(File(output, "$name.png")).use { stream ->
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
@@ -166,6 +168,47 @@ class ScreenshotTest {
             }
         }
         shoot("04-keypad")
+    }
+
+    /**
+     * The gold row one moment after a publication moved it: the pill is tinted, the arrow is up, and
+     * every other row is where it always was. This is the visual half of `PriceMotionTest`.
+     */
+    @Test
+    fun metalFlash() {
+        val now = System.currentTimeMillis()
+        val state = convertState().copy(
+            // The row draws from the table and the motion record describes the same publication.
+            usdTo = rates + ("XAU" to Metals.perUsd(4041.10)),
+            metalMotion = mapOf(
+                "XAU" to MetalMotion(
+                    ounceUsd = 4041.10,
+                    atMs = now,
+                    receivedAt = now,
+                    tick = Tick.Up,
+                    seq = 2,
+                ),
+            ),
+        )
+        compose.setContent {
+            CurrencyTheme {
+                ConvertScreen(
+                    state = state,
+                    onRowTap = {},
+                    onAdd = {},
+                    onRemove = {},
+                    onPin = {},
+                    onMove = { _, _ -> },
+                    onSort = {},
+                    onReset = {},
+                    onRefresh = {},
+                    onToggleSound = {},
+                    onSelectTab = {},
+                )
+            }
+        }
+        // Long enough for the flash to start, short enough to be inside its 900 ms window.
+        shoot("06-metal-flash", settleMs = 260)
     }
 
     @Test

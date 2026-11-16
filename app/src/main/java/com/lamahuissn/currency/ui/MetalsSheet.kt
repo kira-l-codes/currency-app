@@ -24,7 +24,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lamahuissn.currency.data.FeedState
 import com.lamahuissn.currency.data.Metals
+import com.lamahuissn.currency.data.PriceMotion
 
 /**
  * The gold and silver sheet: the ounce price, then the grams a jeweller actually quotes — 24, 22, 21
@@ -41,7 +43,22 @@ fun MetalsSheet(
 ) {
     val ounce = Metals.ounceUsd(rates[code] ?: 0.0)
     val isGold = code == "XAU"
-    val live = metalsAt > 0L && Metals.isLive(System.currentTimeMillis() - metalsAt)
+    // Age decides the label. A number from fifteen minutes ago is not "live" no matter how the last
+    // request ended, and saying so is the whole point of the badge.
+    val feed = PriceMotion.state(
+        hasPrice = ounce > 0.0,
+        ageMs = PriceMotion.ageMs(System.currentTimeMillis(), metalsAt),
+    )
+    val feedLabel = when (feed) {
+        FeedState.Live -> "LIVE"
+        FeedState.Delayed -> "DELAYED"
+        FeedState.Offline -> "OFFLINE"
+    }
+    val feedColor = when (feed) {
+        FeedState.Live -> Ink.Green
+        FeedState.Delayed -> Ink.Amber
+        FeedState.Offline -> Ink.Red
+    }
 
     Box(
         Modifier
@@ -78,18 +95,16 @@ fun MetalsSheet(
                             style = TextStyle(fontFeatureSettings = "tnum"),
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (live) {
-                                Box(Modifier.size(6.dp).clip(CircleShape).background(Ink.Green))
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    "LIVE",
-                                    color = Ink.Green,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = 0.8.sp,
-                                )
-                                Spacer(Modifier.width(6.dp))
-                            }
+                            Box(Modifier.size(6.dp).clip(CircleShape).background(feedColor))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                feedLabel,
+                                color = feedColor,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 0.8.sp,
+                            )
+                            Spacer(Modifier.width(6.dp))
                             Text(
                                 text = "per troy ounce · USD" +
                                     if (updatedAt > 0) " · ${CountScreenTime.format(updatedAt)}" else "",

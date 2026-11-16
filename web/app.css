@@ -101,6 +101,27 @@ body{
   font-variant-numeric:tabular-nums;
 }
 .row.base .pill-value{background:var(--green);border-color:var(--green);color:var(--green-ink);font-weight:800;padding:9px 13px;font-size:14.5px;border-radius:12px}
+
+/* ── live metal ticks ───────────────────────────────────────────────────────
+   The arrow sits in the gap that already exists before the pill and the flash is a one-shot CSS
+   animation, so a moving price costs one text update, one class, and no layout pass. */
+.pill-wrap{position:relative;display:inline-flex;align-items:center;flex-shrink:0}
+.tick{
+  position:absolute;right:100%;margin-right:5px;top:50%;transform:translateY(-50%);
+  font-size:9px;line-height:1;opacity:0;transition:opacity .18s ease;pointer-events:none;
+}
+.tick.show{opacity:1}
+.tick.up{color:var(--green)}
+.tick.down{color:#FF6B61}
+@keyframes metalUp{0%{background:#0F6B33;border-color:#2FBF5F;color:#EAFFF1}}
+@keyframes metalDown{0%{background:#6E1D18;border-color:#C04035;color:#FFE7E4}}
+.pill-wrap.flash-up .pill-value{animation:metalUp 900ms ease-out}
+.pill-wrap.flash-down .pill-value{animation:metalDown 900ms ease-out}
+@media (prefers-reduced-motion: reduce){
+  .pill-wrap.flash-up .pill-value,
+  .pill-wrap.flash-down .pill-value{animation:none}
+  .tick{transition:none}
+}
 /* Metal rows use the same green pill; the ingot badge carries the meaning. */
 
 /* ── chart ───────────────────────────────────────────────── */

@@ -5,7 +5,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lamahuissn.currency.data.CurrencyCatalog
 import com.lamahuissn.currency.data.Point
+import com.lamahuissn.currency.data.FeedState
 import com.lamahuissn.currency.data.Metals
+import com.lamahuissn.currency.data.PriceMotion
+import com.lamahuissn.currency.data.Tick
 import com.lamahuissn.currency.data.Prefs
 import com.lamahuissn.currency.data.RatesClient
 import com.lamahuissn.currency.data.moveItem
@@ -23,6 +26,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 
+/** One metal's last accepted publication, plus what the UI needs to animate it once. */
+data class MetalMotion(
+    val ounceUsd: Double,
+    /** Provider time when it exists, receipt time otherwise — the identity that blocks re-plays. */
+    val atMs: Long,
+    /** Local clock when it landed, which is what the age label is measured from. */
+    val receivedAt: Long,
+    val tick: Tick = Tick.Flat,
+    /** Bumped on every accepted move so the UI can key its animation without comparing floats. */
+    val seq: Int = 0,
+)
+
 data class ConvertUi(
     val base: String = Prefs.DEFAULT_BASE,
     val amount: Double = 1.0,
@@ -34,6 +49,8 @@ data class ConvertUi(
     val updatedAt: Long = 0L,
     /** When the metals were last read — they move intraday, the fiat table does not. */
     val metalsAt: Long = 0L,
+    /** The last accepted gold and silver publications, with their direction. */
+    val metalMotion: Map<String, MetalMotion> = emptyMap(),
     val loading: Boolean = false,
     val error: String? = null,
 ) {
@@ -50,6 +67,16 @@ data class ConvertUi(
 
     /** What the list draws: pinned first, never the base itself, never the same code twice. */
     val rows: List<String> get() = orderRows(base, targets, pinned)
+
+    /** Live / Delayed / Offline for the metal feed, decided by the age of the last accepted price. */
+    fun metalState(nowMs: Long): FeedState = PriceMotion.state(
+        hasPrice = metalMotion.isNotEmpty(),
+        ageMs = PriceMotion.ageMs(nowMs, metalMotion.values.maxOfOrNull { it.receivedAt } ?: 0L),
+    )
+
+    /** How a metal's row should look right now — flash only while the animation window is open. */
+    fun motionOf(code: String, nowMs: Long): MetalMotion? = metalMotion[code]
+        ?.takeIf { it.tick != Tick.Flat && nowMs - it.receivedAt in 0..PriceMotion.FLASH_MS }
 }
 
 data class ChartUi(
@@ -112,19 +139,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val fiat = client.fiatPerUsd()
                     val crypto = runCatching { client.cryptoPerUsd() }.getOrDefault(emptyMap())
                     // Metals ride along: if their feed is down the currency list still fills.
-                    val metals = runCatching { client.metalsPerUsd() }.getOrDefault(emptyMap())
-                    fiat + crypto + metals
+                    val metals = runCatching { client.metalQuotes() }.getOrDefault(emptyMap())
+                    (fiat + crypto) to metals
                 }
             }
-            result.onSuccess { table ->
+            result.onSuccess { (table, quotes) ->
                 val now = System.currentTimeMillis()
-                prefs.cachedRates = table
+                val motion = acceptedMotion(quotes, now)
+                val withMetals = table + motion.mapValues { Metals.perUsd(it.value.ounceUsd) }
+                prefs.cachedRates = withMetals
                 prefs.updatedAt = now
                 _convert.update {
                     it.copy(
-                        usdTo = table,
+                        usdTo = withMetals,
                         updatedAt = now,
-                        metalsAt = if (Metals.codes.any(table::containsKey)) now else it.metalsAt,
+                        metalsAt = if (motion.isNotEmpty()) now else it.metalsAt,
+                        metalMotion = motion,
                         loading = false,
                         error = null,
                     )
@@ -153,24 +183,51 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (metalsInFlight) return
         metalsInFlight = true
         viewModelScope.launch {
-            val metals = try {
+            val quotes = try {
                 withContext(Dispatchers.IO) {
-                    runCatching { client.metalsPerUsd() }.getOrDefault(emptyMap())
+                    runCatching { client.metalQuotes() }.getOrDefault(emptyMap())
                 }
             } finally {
                 metalsInFlight = false
             }
-            if (metals.isEmpty()) {
+            if (quotes.isEmpty()) {
                 // The feed did not answer: keep the last prices and leave their timestamp alone, so
                 // the sheet keeps telling the truth about how old the number is.
-                _convert.update { it.copy(metalsAt = _convert.value.metalsAt) }
                 return@launch
             }
             val at = System.currentTimeMillis()
-            val merged = _convert.value.usdTo + metals
+            val motion = acceptedMotion(quotes, at)
+            if (motion.isEmpty()) return@launch      // same publications: nothing moved, animate nothing
+            val merged = _convert.value.usdTo + motion.mapValues { Metals.perUsd(it.value.ounceUsd) }
             prefs.cachedRates = merged
-            _convert.update { it.copy(usdTo = merged, metalsAt = at) }
+            _convert.update { it.copy(usdTo = merged, metalsAt = at, metalMotion = motion) }
         }
+    }
+
+    /**
+     * Merges a fresh read with what is already on screen: a publication the app has not seen yet is
+     * accepted, given a direction against the previous price, and stamped with a new sequence number.
+     * Everything else is dropped, so two polls inside one provider publication cost no animation.
+     */
+    private fun acceptedMotion(quotes: Map<String, Metals.Quote>, receivedAt: Long): Map<String, MetalMotion> {
+        if (quotes.isEmpty()) return emptyMap()
+        val current = _convert.value.metalMotion
+        val next = current.toMutableMap()
+        var changed = false
+        quotes.forEach { (code, quote) ->
+            val previous = current[code]
+            val stamp = quote.atMs.takeIf { it > 0L } ?: receivedAt
+            if (!PriceMotion.accept(quote.ounceUsd, stamp, previous?.atMs ?: 0L)) return@forEach
+            next[code] = MetalMotion(
+                ounceUsd = quote.ounceUsd,
+                atMs = stamp,
+                receivedAt = receivedAt,
+                tick = PriceMotion.tick(previous?.ounceUsd, quote.ounceUsd),
+                seq = (previous?.seq ?: 0) + 1,
+            )
+            changed = true
+        }
+        return if (changed) next else emptyMap()
     }
 
     /**
@@ -338,6 +395,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         /** Fifteen seconds: fast enough to watch, slow enough not to lean on a free feed. */
-        const val METALS_INTERVAL_MS = 15_000L
+        /** gold-api publishes once every 30 s; polling faster only re-reads the same number. */
+        const val METALS_INTERVAL_MS = PriceMotion.PROVIDER_PERIOD_MS
     }
 }
