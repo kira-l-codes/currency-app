@@ -24,6 +24,15 @@ the card answers `✓ Match`, `Short $49.00` or `Over $12.00` as you count. Coun
 writes a line into a history that restores the exact notes, and each currency can carry a **manual
 rate** (the street rate, not the published one) with the sheet saying plainly when rates are cached.
 
+**Live gold and silver** — the two metal rows flash green or red for under a second when the feed
+publishes a new price, with a small ▲ / ▼ in the gap before the pill. Nothing else on the row moves:
+the indicator lives in space that was already empty. `gold-api.com` publishes once every 30 seconds,
+so the app polls every 30 seconds and the feed's own `updatedAt` decides what counts as new — a poll
+that lands inside the same publication changes nothing and animates nothing. The sheet labels the
+feed **LIVE** under 75 s, **DELAYED** under 15 minutes, **OFFLINE** past that; a stale number is never
+called live. The rules live in `data/PriceMotion.kt` and `web/motion.js` with the same thresholds and
+the same tests, and both clients stop polling when they are not on screen.
+
 **Gold and silver** — spot prices by the troy ounce from a keyless feed. A metal row shows its price,
 not a converted fraction; tapping it opens the ounce, the gram at 24 / 22 / 21 / 18 karat, and the
 7.32 g 21k gold pound. Metals refresh every 15 seconds while the app is on screen, and stop the moment
@@ -100,6 +109,7 @@ touches it.
 | `app.css` | one stylesheet, the app's palette |
 | `app.js` | rate table, conversion direction, expression parser, all three views |
 | `manifest.webmanifest` + icons | makes it installable to the home screen |
+| `motion.js` | the price-motion rules, shared with the Node tests |
 | `sw.js` | caches the shell only — never a price |
 
 Two rules are worth knowing before editing it:
@@ -117,9 +127,14 @@ as stale, and replaced the moment the network returns.
 
 ## Tests
 
-`./gradlew :app:testDebugUnitTest` — 76 JVM tests: money formatting, list rules, gesture
+`./gradlew :app:testDebugUnitTest` — 100 JVM tests: money formatting, list rules, gesture
 disambiguation, the count arithmetic (mixed bags, karats, expected-vs-counted, the 50,000 LBP case),
-storage round-trips, and parsers pinned to bodies captured live from each endpoint.
+storage round-trips, parsers pinned to bodies captured live from each endpoint, and the price-motion
+rules (direction, the half-cent epsilon that ignores float noise, duplicate publications, out-of-order
+replies, the LIVE/DELAYED/OFFLINE bands, and the provider timestamp parser).
+
+`node --test web/tests/motion.test.mjs` — 19 tests over the exact `web/motion.js` the browser loads,
+run in CI before the Pages deploy.
 
 ## Layout
 

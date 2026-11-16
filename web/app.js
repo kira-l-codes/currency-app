@@ -446,6 +446,9 @@
     if (meta) {
       void wrap.offsetWidth;                    // restart the CSS animation on a fresh move
       wrap.classList.add(meta.tick === "up" ? "flash-up" : "flash-down");
+      // The tint returns on its own (CSS), but the arrow is DOM: clear it when the window closes,
+      // otherwise a row keeps pointing at a move that happened half a minute ago.
+      setTimeout(() => paintMetalRow(code), M.FLASH_MS + 60);
     }
   }
 
