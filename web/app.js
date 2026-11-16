@@ -302,20 +302,22 @@
   $("pickerClose").addEventListener("click", () => sheetClose("picker"));
 
   /* ── rates ───────────────────────────────────────────────────────────────── */
+  const STALE_AFTER = 15 * 60 * 1000;
+
   function paintStatus() {
-    const sub = $("convertSub");
+    const age = state.updated ? Date.now() - state.updated : Infinity;
+    const fresh = age < STALE_AFTER;
     const when = state.updated
       ? new Date(state.updated).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
       : "—";
-    sub.textContent = (state.live ? "Updated " : "Cached ") + when + " · " + state.order.length + " currencies · " + VERSION;
-    $("convertSource").textContent = state.live
-      ? "Rates by open.er-api.com"
-      : state.updated
-        ? "Offline · rates from " + new Date(state.updated).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
-        : "Offline · built-in reference rates, not live";
+    // What matters is how old the numbers are, not which browser event fired last.
+    $("convertSub").textContent = (fresh ? "Updated " : "Cached ") + when + " · " + state.order.length + " currencies · " + VERSION;
+    $("convertSource").textContent = navigator.onLine === false
+      ? (state.updated ? "Offline · rates from " + new Date(state.updated).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "Offline · built-in reference rates, not live")
+      : "Rates by open.er-api.com · gold by gold-api";
     const pill = $("countRates");
-    pill.classList.toggle("stale", !state.live);
-    $("countRatesText").textContent = state.live ? "Rates live" : "Cached " + when;
+    pill.classList.toggle("stale", !fresh);
+    $("countRatesText").textContent = fresh ? "Rates live" : "Cached " + when;
   }
 
   function offlineNotice() {
@@ -508,7 +510,7 @@
   window.addEventListener("appinstalled", () => { $("installBanner").hidden = true; });
 
   window.addEventListener("online", () => { toast("Back online"); loadRates(); });
-  window.addEventListener("offline", () => { state.live = false; paintStatus(); toast("Offline · last known rates"); });
+  window.addEventListener("offline", () => { paintStatus(); toast("Offline · last known rates"); });
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden && Date.now() - state.updated > 5 * 60 * 1000) loadRates();
   });
