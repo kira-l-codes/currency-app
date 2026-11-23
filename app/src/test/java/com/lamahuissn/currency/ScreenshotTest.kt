@@ -146,7 +146,6 @@ class ScreenshotTest {
                 MetalsSheet(
                     code = "XAU",
                     rates = rates,
-                    feed = com.lamahuissn.currency.data.FeedState.Live,
                     publishedAt = System.currentTimeMillis() - 20_000,
                     onDismiss = {},
                 )

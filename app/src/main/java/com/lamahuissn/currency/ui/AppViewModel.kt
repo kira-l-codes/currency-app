@@ -89,11 +89,8 @@ data class ConvertUi(
      * feed never gave. That is a state of its own — the sheet says so — because inventing LIVE from
      * a timestamp we made up is the same lie as showing a stale price as fresh.
      */
-    fun metalFeed(code: String, nowMs: Long): FeedState? {
-        if (!usdTo.containsKey(code)) return null
-        val publishedAt = metalPublishedAt(code) ?: return null
-        return PriceMotion.state(hasPrice = true, ageMs = nowMs - publishedAt)
-    }
+    fun metalFeed(code: String, nowMs: Long): FeedState? =
+        PriceMotion.stateAt(usdTo.containsKey(code), metalPublishedAt(code), nowMs)
 
     /** How a metal's row should look right now — flash only while the animation window is open. */
     fun motionOf(code: String, nowMs: Long): MetalMotion? = metalMotion[code]

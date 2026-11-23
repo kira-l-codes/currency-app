@@ -419,7 +419,6 @@ fun ConvertScreen(
             MetalsSheet(
                 code = code,
                 rates = state.usdTo,
-                feed = state.metalFeed(code, System.currentTimeMillis()),
                 publishedAt = state.metalPublishedAt(code),
                 onDismiss = { metalFor = null },
             )

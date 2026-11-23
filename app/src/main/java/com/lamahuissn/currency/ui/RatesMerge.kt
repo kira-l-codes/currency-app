@@ -86,9 +86,10 @@ object RatesMerge {
             val usd = parts[1].toDoubleOrNull() ?: return@forEach
             val at = parts[2].toLongOrNull() ?: return@forEach
             val seq = parts[3].toIntOrNull() ?: return@forEach
-            // A four-field line was written before the flag existed; treat its time as published,
-            // because that is what it meant then.
-            val atKnown = parts.getOrNull(4)?.trim() != "0"
+            // A four-field line predates the flag, and the build that wrote it substituted the
+            // receipt time whenever a quote had no publication time. Its provenance is therefore
+            // unknown: the entry is kept (the price is real) but its age is not claimed.
+            val atKnown = parts.getOrNull(4)?.trim() == "1"
             if (code.isEmpty() || usd <= 0.0 || at <= 0L) return@forEach
             out[code] = MetalMotion(
                 ounceUsd = usd,

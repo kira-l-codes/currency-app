@@ -41,6 +41,12 @@ object PriceMotion {
     /** How long the flash and the arrow stay on screen. */
     const val FLASH_MS = 900L
 
+    /**
+     * How often an open metal sheet re-reads the clock. Half a publication period, so the label
+     * crosses the LIVE→DELAYED boundary within one tick of it happening, without a per-frame timer.
+     */
+    const val FRESHNESS_TICK_MS = 15_000L
+
     fun tick(previousUsd: Double?, nextUsd: Double): Tick {
         if (previousUsd == null || !previousUsd.isFinite() || previousUsd <= 0.0) return Tick.Flat
         if (!nextUsd.isFinite() || nextUsd <= 0.0) return Tick.Flat
@@ -48,6 +54,13 @@ object PriceMotion {
         if (kotlin.math.abs(delta) < TICK_EPSILON_USD) return Tick.Flat
         return if (delta > 0.0) Tick.Up else Tick.Down
     }
+
+    /**
+     * A metal's state from its own publication time. Null means the age is **unknown**: there is no
+     * price, or the feed never said when it published (a receipt time is not a publication).
+     */
+    fun stateAt(hasPrice: Boolean, publishedAtMs: Long?, nowMs: Long): FeedState? =
+        if (!hasPrice || publishedAtMs == null) null else state(true, ageMs(nowMs, publishedAtMs))
 
     fun state(hasPrice: Boolean, ageMs: Long): FeedState = when {
         !hasPrice -> FeedState.Offline

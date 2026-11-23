@@ -16,6 +16,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.lamahuissn.currency.data.FeedState
 import com.lamahuissn.currency.data.Metals
 import com.lamahuissn.currency.data.PriceMotion
+import kotlinx.coroutines.delay
 
 /**
  * The gold and silver sheet: the ounce price, then the grams a jeweller actually quotes — 24, 22, 21
@@ -38,17 +44,34 @@ fun MetalsSheet(
     code: String,
     rates: Map<String, Double>,
     /**
-     * This metal's own freshness, measured from its own publication time.
-     * Null means the age is not known — no price, or a price the feed sent without a timestamp.
-     * A fresh gold publication must never make a stale silver sheet look fresh.
+     * The provider's publication time for THIS metal, or null when the feed gave none.
+     * Freshness is derived from it against a clock that keeps moving while the sheet is open, so a
+     * failed or repeated poll cannot leave a stale label on screen. A fresh gold publication never
+     * makes a stale silver sheet look fresh.
      */
-    feed: FeedState?,
-    /** The provider's publication time, or null when the feed gave none. */
     publishedAt: Long?,
     onDismiss: () -> Unit,
+    /**
+     * The clock this sheet reads. It is a parameter so a test can move time without waiting, and so
+     * the age is computed from one explicit source rather than from ambient calls scattered around.
+     */
+    nowMsProvider: () -> Long = { System.currentTimeMillis() },
 ) {
     val ounce = Metals.ounceUsd(rates[code] ?: 0.0)
     val isGold = code == "XAU"
+
+    // The age has to advance on its own. Recomputing only when the caller recomposes meant a sheet
+    // left open during a failed feed kept saying LIVE; this ticker re-reads the clock every 15 s
+    // while the sheet is composed (it stops when the sheet closes).
+    var nowMs by remember { mutableLongStateOf(nowMsProvider()) }
+    LaunchedEffect(publishedAt) {
+        if (publishedAt == null) return@LaunchedEffect
+        while (true) {
+            delay(PriceMotion.FRESHNESS_TICK_MS)
+            nowMs = nowMsProvider()
+        }
+    }
+    val feed = PriceMotion.stateAt(ounce > 0.0, publishedAt, nowMs)
     val feedLabel = when (feed) {
         FeedState.Live -> "LIVE"
         FeedState.Delayed -> "DELAYED"

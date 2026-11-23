@@ -56,6 +56,27 @@ class MetalBookTest {
     }
 
     @Test
+    fun `a four-field record keeps its price but claims no publication time`() {
+        // The build that wrote four-field books substituted the receipt time when a quote carried no
+        // timestamp, so the field cannot be trusted as a publication time. The price is real; the age
+        // is unknown, and the sheet says so instead of inventing LIVE.
+        val legacy = "XAU|3620.0|1790000000000|4"
+        val decoded = RatesMerge.decodeBook(legacy)
+
+        assertEquals(setOf("XAU"), decoded.keys)
+        assertEquals(3620.0, decoded.getValue("XAU").ounceUsd, 0.0)
+        assertFalse(decoded.getValue("XAU").atKnown)
+    }
+
+    @Test
+    fun `a five-field record keeps the flag it was written with`() {
+        val known = RatesMerge.decodeBook("XAU|3620.0|1790000000000|4|1")
+        val unknown = RatesMerge.decodeBook("XAU|3620.0|1790000000000|4|0")
+        assertTrue(known.getValue("XAU").atKnown)
+        assertFalse(unknown.getValue("XAU").atKnown)
+    }
+
+    @Test
     fun `a corrupt line is dropped, not guessed at`() {
         val raw = "XAU|3620.0|1790000000000|4\nXAG|oops|later|7\n\nbroken"
         val decoded = RatesMerge.decodeBook(raw)
