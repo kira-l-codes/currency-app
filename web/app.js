@@ -7,7 +7,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "web 1.2";
+  const VERSION = "web 1.3";
 
   /* ── catalogue ───────────────────────────────────────────────────────────── */
   const CAT = {
@@ -63,8 +63,11 @@
     KRW:1370, HKD:7.81, SGD:1.28, MYR:4.14, THB:32.2, IDR:16250, PHP:57.6, VND:25400,
     AUD:1.54, NZD:1.68, CAD:1.37, BRL:5.35, MXN:18.4, ARS:1250, CLP:945, COP:3900,
     PEN:3.55, ZAR:17.3, NGN:1450, KES:129, GHS:11.7, RUB:79.5, UAH:41.5, PLN:3.62,
-    CZK:20.8, HUF:335, RON:4.43, SEK:9.35, NOK:9.98, DKK:6.65, CHF:0.798, ISK:122,
-    BTC:0.0000091, ETH:0.00023 };
+    CZK:20.8, HUF:335, RON:4.43, SEK:9.35, NOK:9.98, DKK:6.65, CHF:0.798, ISK:122 };
+  // No baked-in crypto: a coin has no "reference rate" and quoting a hardcoded price as if it were
+  // live is the kind of lie this app refuses. They arrive from CoinGecko or they read "—".
+
+  const CRYPTO_IDS = { BTC: "bitcoin", ETH: "ethereum" };
 
   const DEFAULT_ORDER = ["LBP","EGP","TRY","EUR","INR","GBP","SYP","AED","SAR","XAU","XAG","BTC","JPY","CNY","CHF","CAD","AUD"];
   const STORE = "currency.web.v2";
@@ -144,7 +147,9 @@
         tick: M.tick(previous ? previous.ounceUsd : null, quote.ounceUsd),
         seq: (previous ? previous.seq : 0) + 1,
       };
-      state.metals[code] = quote.ounceUsd;
+      // The table holds units per 1 USD; one ounce is worth `ounceUsd` dollars, so it is 1/ounce
+      // "ounces to the dollar". Storing the price here made XAU-as-base divide instead of multiply.
+      state.metals[code] = 1 / quote.ounceUsd;
       changed.push(code);
     });
     return changed;
@@ -377,12 +382,23 @@
   async function loadRates() {
     if (navigator.onLine === false) offlineNotice();
     try {
-      const [fiat, gold, silver] = await Promise.all([
+      const cryptoIds = Object.values(CRYPTO_IDS).join(",");
+      const [fiat, gold, silver, crypto] = await Promise.all([
         fetch("https://open.er-api.com/v6/latest/USD", { cache: "no-store" }).then((r) => r.json()),
         fetch("https://api.gold-api.com/price/XAU", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
         fetch("https://api.gold-api.com/price/XAG", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+        fetch("https://api.coingecko.com/api/v3/simple/price?ids=" + cryptoIds + "&vs_currencies=usd", { cache: "no-store" })
+          .then((r) => r.json()).catch(() => null),
       ]);
       if (fiat && fiat.rates) state.rates = { ...state.rates, ...fiat.rates };
+      // A coin worth N dollars is 1/N of a dollar's worth of coin; no reply means no price.
+      if (crypto) {
+        Object.entries(CRYPTO_IDS).forEach(([code, id]) => {
+          const usd = crypto[id] && crypto[id].usd;
+          if (usd > 0) state.rates[code] = 1 / usd;
+          else delete state.rates[code];
+        });
+      }
       const quotes = {};
       if (gold && gold.price > 0) quotes.XAU = quoteOf(gold);
       if (silver && silver.price > 0) quotes.XAG = quoteOf(silver);
@@ -423,7 +439,10 @@
     return Date.now() - meta.receivedAt <= M.FLASH_MS ? meta : null;
   }
 
-  const metalPillText = (code) => "$" + money2(perUsd(code) || 0) + " / oz";
+  const metalPillText = (code) => {
+    const unit = perUsd(code) || 0;              // ounces per dollar
+    return unit > 0 ? "$" + money2(1 / unit) + " / oz" : "—";
+  };
 
   /**
    * Repaints one metal row in place. A tick must not rebuild the list: sixteen rows of DOM for one
@@ -493,6 +512,8 @@
 
     li.addEventListener("click", () => {
       if (code === state.base) { openAmountSheet(); return; }
+      // The currency that was the base has to stay watchable, or picking gold hides the dollars.
+      if (!state.order.includes(state.base) && state.base !== code) state.order.unshift(state.base);
       state.base = code;
       saveState();
       renderAll();
@@ -1119,7 +1140,6 @@
     document.getElementById("countFoot").textContent = newest
       ? "Last saved " + new Date(newest.at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
       : "Nothing saved yet · Save keeps the exact notes so Restore can rebuild the bag";
-    void value;
   }
 
   /* ── actions ─────────────────────────────────────────────────────────────── */

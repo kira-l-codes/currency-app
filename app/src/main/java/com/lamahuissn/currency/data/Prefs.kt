@@ -16,8 +16,9 @@ class Prefs(context: Context) {
         set(value) = sp.edit().putString("base", value).apply()
 
     var amount: Double
-        get() = sp.getFloat("amount", 1f).toDouble()
-        set(value) = sp.edit().putFloat("amount", value.toFloat()).apply()
+        get() = sp.getString("amountStr", null)?.toDoubleOrNull()
+            ?: sp.getFloat("amount", 1f).toDouble()   // installs written before the fix
+        set(value) = sp.edit().putString("amountStr", value.toString()).apply()
 
     var targets: List<String>
         get() {

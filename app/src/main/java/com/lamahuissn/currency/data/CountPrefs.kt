@@ -72,7 +72,8 @@ class CountPrefs(context: Context) {
             bag = bag,
             counts = CountCodec.decodeStacks(sp.getString("counts", null)),
             manualRates = CountCodec.decodeRates(sp.getString("manualRates", null)),
-            expected = sp.getFloat("expected", 0f).toDouble(),
+            expected = sp.getString("expectedStr", null)?.toDoubleOrNull()
+                ?: sp.getFloat("expected", 0f).toDouble(),
             history = CountCodec.decodeHistory(sp.getString("history", null)),
             collapsed = sp.getString("collapsed", null)
                 ?.split(',')?.filter { it.isNotBlank() }?.toSet()
@@ -86,7 +87,7 @@ class CountPrefs(context: Context) {
             .putString("bag", state.bag.joinToString(","))
             .putString("counts", CountCodec.encodeStacks(state.counts))
             .putString("manualRates", CountCodec.encodeRates(state.manualRates))
-            .putFloat("expected", state.expected.toFloat())
+            .putString("expectedStr", state.expected.toString())
             .putString("history", CountCodec.encodeHistory(state.history))
             .putString("collapsed", state.collapsed.joinToString(","))
             .putString("savedFingerprint", state.savedFingerprint)
