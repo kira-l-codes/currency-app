@@ -37,13 +37,18 @@ jobs:
           cd web
           node --test --test-reporter=spec tests/*.test.mjs 2>&1 | tee /tmp/web-tests.log
 
+      # Printed, not only written to the summary: a number nobody can read in the log is not evidence.
       - name: Report the counts
         if: always()
         run: |
-          echo "### Web tests" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          grep -E "^# (tests|pass|fail)" /tmp/web-tests.log >> "$GITHUB_STEP_SUMMARY" || echo "no summary lines" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          COUNTS="$(grep -E '^# (tests|pass|fail)' /tmp/web-tests.log || echo 'no summary lines')"
+          printf '%s\n' "$COUNTS"
+          {
+            echo "### Web tests"
+            echo '```'
+            printf '%s\n' "$COUNTS"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   android:
     name: JVM unit tests
@@ -87,7 +92,7 @@ jobs:
       - name: Report the counts
         if: always()
         run: |
-          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
           import glob, re
           total = failures = 0
           for path in glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml"):
