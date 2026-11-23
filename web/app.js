@@ -7,7 +7,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "web 1.8";
+  const VERSION = "web 1.9";
 
   /* ── catalogue ───────────────────────────────────────────────────────────── */
   const CAT = {
@@ -176,7 +176,16 @@
   const evaluate = (raw) => L.evaluate(raw);
   const figure = (v) => L.formatFigure(v);
 
+  /**
+   * Set when the stored record could not be parsed. While it is set, nothing writes to the key: the
+   * bytes on disk are the only copy of whatever the person had, and replacing them with a default
+   * state would destroy it. This is a guard, not a recovery system — the session works in memory and
+   * says so.
+   */
+  let storageUnreadable = false;
+
   function saveState() {
+    if (storageUnreadable) return false;   // never replace a record we could not read
     try {
       localStorage.setItem(STORE, JSON.stringify({
         v: L.STATE_VERSION,
@@ -185,14 +194,39 @@
         rates: state.rates, metals: state.metals, updated: state.updated,
         metalMeta: state.metalMeta,
       }));
-    } catch (e) { /* private mode: it still works, it just forgets */ }
+      return true;
+    } catch (e) { return false; }          // private mode: it still works, it just forgets
   }
+
+  /** A short, honest notice. It does not claim the record was recovered, because it was not. */
+  function showStorageNotice() {
+    const el = $("storageWarning");
+    if (!el) return;
+    el.textContent = "Saved data on this device could not be read. It has been left exactly as it is, "
+      + "and nothing new will be saved this session.";
+    el.hidden = false;
+  }
+
   function loadState() {
+    let raw = null;
     try {
-      const raw = localStorage.getItem(STORE);
-      if (!raw) return;
+      raw = localStorage.getItem(STORE);
+    } catch (e) {
+      return;                               // storage blocked: nothing to read, nothing to guard
+    }
+    if (!raw) return;
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      // Leave the raw value untouched and stop every write path for this session.
+      storageUnreadable = true;
+      showStorageNotice();
+      return;
+    }
+    try {
       // The record carries its own version; older shapes are upgraded by name, not by guessing.
-      const s = L.migrateRecord(JSON.parse(raw));
+      const s = L.migrateRecord(parsed);
       if (s.base && CAT[s.base]) state.base = s.base;
       if (typeof s.amount === "number" && s.amount > 0) state.amount = s.amount;
       if (Array.isArray(s.order) && s.order.length) state.order = s.order.filter((c) => CAT[c]);
@@ -212,7 +246,12 @@
       // A stored publication time lets the first paint say DELAYED instead of pretending.
       if (s.metalMeta) state.metalMeta = s.metalMeta;
       if (s.updated) state.updated = s.updated;
-    } catch (e) { /* a corrupt key must not brick the app */ }
+    } catch (e) {
+      // A parsed record whose shape throws is treated like an unreadable one: keep the bytes, stop
+      // writing, say so. half-read data is not a recovery.
+      storageUnreadable = true;
+      showStorageNotice();
+    }
   }
 
   /* ── toast ───────────────────────────────────────────────────────────────── */
