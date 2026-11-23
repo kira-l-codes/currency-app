@@ -100,17 +100,34 @@ jobs:
           yes | "$SDKM" --licenses > /dev/null 2>&1 || true
           "$SDKM" "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
 
-      - name: Cache Gradle
+      # Robolectric downloads its android-all jars at test time into ~/.m2. Caching them keeps the
+      # suite from depending on a Maven round trip on every run.
+      - name: Cache Gradle and Robolectric jars
         uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
+            ~/.m2/repository
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', 'gradle/wrapper/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
           restore-keys: gradle-${{ runner.os }}-
 
+      # Robolectric's first run fetches an android-all jar from Maven; a network blip must not read as
+      # a code failure, and a real failure fails all three attempts and still goes red.
       - name: Run unit tests
-        run: ./gradlew :app:testDebugUnitTest --console=plain
+        shell: bash
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            if ./gradlew :app:testDebugUnitTest --console=plain; then
+              echo "unit tests passed on attempt $attempt"
+              exit 0
+            fi
+            echo "attempt $attempt failed (a downloaded artifact or a real failure); retrying"
+            sleep 20
+          done
+          echo "unit tests failed three times"
+          exit 1
 
       # Parsed structurally, not with a regex over the first 600 bytes. A missing, malformed or
       # empty report fails this step: a reassuring "0 tests / 0 failures" would read as coverage
