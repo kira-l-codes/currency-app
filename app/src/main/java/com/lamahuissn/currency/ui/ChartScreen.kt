@@ -103,7 +103,9 @@ fun ChartScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = last?.let { "$" + formatValue(it) } ?: "—",
+                    // No currency symbol here: the header already says "USD per 1 EUR", and a dollar
+                    // sign in front of a euro quote is simply wrong.
+                    text = last?.let { formatValue(it) } ?: "—",
                     color = Ink.Text,
                     fontSize = 34.sp,
                     fontWeight = FontWeight.Light,

@@ -77,6 +77,14 @@ data class ConvertUi(
     /** How a metal's row should look right now — flash only while the animation window is open. */
     fun motionOf(code: String, nowMs: Long): MetalMotion? = metalMotion[code]
         ?.takeIf { it.tick != Tick.Flat && nowMs - it.receivedAt in 0..PriceMotion.FLASH_MS }
+
+    /**
+     * The metal rows for the current table: every publication known, overlaid with anything accepted
+     * this round. Passing an empty [motion] must keep the prices already in [usdTo] — a refresh that
+     * arrives between two provider publications changes nothing, and must delete nothing.
+     */
+    fun metalPrices(motion: Map<String, MetalMotion> = metalMotion): Map<String, Double> =
+        usdTo.filterKeys { Metals.isMetal(it) } + motion.mapValues { Metals.perUsd(it.value.ounceUsd) }
 }
 
 data class ChartUi(
@@ -145,7 +153,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             result.onSuccess { (table, quotes) ->
                 val now = System.currentTimeMillis()
-                val motion = acceptedMotion(quotes, now)
+                val (motion, moved) = mergeMotion(quotes, now)
+                // Metals that did not move still have a price: mergeMotion returns everything known,
+                // not just this round's changes. Returning only the changes deleted gold and silver
+                // from the list on any refresh that landed between two 30-second publications.
                 val withMetals = table + motion.mapValues { Metals.perUsd(it.value.ounceUsd) }
                 prefs.cachedRates = withMetals
                 prefs.updatedAt = now
@@ -153,7 +164,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     it.copy(
                         usdTo = withMetals,
                         updatedAt = now,
-                        metalsAt = if (motion.isNotEmpty()) now else it.metalsAt,
+                        metalsAt = if (moved) now else it.metalsAt,
                         metalMotion = motion,
                         loading = false,
                         error = null,
@@ -196,8 +207,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             val at = System.currentTimeMillis()
-            val motion = acceptedMotion(quotes, at)
-            if (motion.isEmpty()) return@launch      // same publications: nothing moved, animate nothing
+            val (motion, moved) = mergeMotion(quotes, at)
+            if (!moved) return@launch                // same publications: nothing moved, animate nothing
             val merged = _convert.value.usdTo + motion.mapValues { Metals.perUsd(it.value.ounceUsd) }
             prefs.cachedRates = merged
             _convert.update { it.copy(usdTo = merged, metalsAt = at, metalMotion = motion) }
@@ -205,15 +216,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Merges a fresh read with what is already on screen: a publication the app has not seen yet is
-     * accepted, given a direction against the previous price, and stamped with a new sequence number.
-     * Everything else is dropped, so two polls inside one provider publication cost no animation.
+     * Merges a fresh read with what is already on screen. A publication the app has not seen is
+     * accepted, given a direction against the previous price and a new sequence number; a repeated
+     * publication changes nothing and animates nothing.
+     *
+     * Returns **everything known**, plus whether anything moved. The earlier version returned only
+     * the changes, and an empty result was then written into the state — so a refresh that landed
+     * between two 30-second publications removed gold and silver from the list entirely.
      */
-    private fun acceptedMotion(quotes: Map<String, Metals.Quote>, receivedAt: Long): Map<String, MetalMotion> {
-        if (quotes.isEmpty()) return emptyMap()
+    private fun mergeMotion(quotes: Map<String, Metals.Quote>, receivedAt: Long): Pair<Map<String, MetalMotion>, Boolean> {
         val current = _convert.value.metalMotion
+        if (quotes.isEmpty()) return current to false
         val next = current.toMutableMap()
-        var changed = false
+        var moved = false
         quotes.forEach { (code, quote) ->
             val previous = current[code]
             val stamp = quote.atMs.takeIf { it > 0L } ?: receivedAt
@@ -225,9 +240,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 tick = PriceMotion.tick(previous?.ounceUsd, quote.ounceUsd),
                 seq = (previous?.seq ?: 0) + 1,
             )
-            changed = true
+            moved = true
         }
-        return if (changed) next else emptyMap()
+        return next to moved
     }
 
     /**

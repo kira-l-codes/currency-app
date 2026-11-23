@@ -7,7 +7,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "web 1.3";
+  const VERSION = "web 1.4";
 
   /* ── catalogue ───────────────────────────────────────────────────────────── */
   const CAT = {
@@ -287,10 +287,9 @@
     if (key === "C") { entry = ""; fresh = false; paintKeypad(); return; }
     if (key === "back") { entry = entry.slice(0, -1); fresh = false; paintKeypad(); return; }
     if (key === "1K" || key === "100" || key === "10") {
-      // The app's shortcuts add zeros to what is already there: 5, then 1K, is 5000.
-      const zeros = { "1K": "000", "100": "00", "10": "0" }[key];
-      if (!entry || /[+\-*/]$/.test(entry)) entry = { "1K": "1000", "100": "100", "10": "10" }[key];
-      else entry += zeros;
+      // The shortcuts REPLACE the entry, they do not append zeros: the Android keypad sets 1000 /
+      // 100 / 10 outright, and the two builds have to behave the same way for the same tap.
+      entry = { "1K": "1000", "100": "100", "10": "10" }[key];
       fresh = false;
       paintKeypad();
       return;
