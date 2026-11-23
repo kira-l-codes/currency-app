@@ -39,6 +39,22 @@ class FormatTest {
     }
 
     @Test
+    fun `a nonzero amount below the last printed digit is a floor, not a zero`() {
+        // Eight decimals is the narrowest this prints: anything under half of that last digit would
+        // read as 0.00000000, so it says so instead of claiming the amount is zero.
+        assertEquals("<0.00000001", formatValue(1e-12))
+        assertEquals("<0.00000001", formatValue(4.9e-9))
+        // Above the floor the value prints, and the exact half-way point is left to the formatter's
+        // rounding mode rather than asserted as a promise.
+        assertEquals("0.00000001", formatValue(9e-9))
+    }
+
+    @Test
+    fun `true zero still reads as zero`() {
+        assertEquals("0.00", formatValue(0.0))
+    }
+
+    @Test
     fun `badges lead with the currency's own symbol`() {
         assertEquals("$1.00", badgeText("USD", 1.0))
         assertEquals("£S 13,002.00", badgeText("SYP", 13002.0))

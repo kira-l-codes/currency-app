@@ -31,11 +31,16 @@ data class MetalMotion(
     val ounceUsd: Double,
     /** Provider time when it exists, receipt time otherwise — the identity that blocks re-plays. */
     val atMs: Long,
-    /** Local clock when it landed, which is what the age label is measured from. */
+    /** Local clock when it landed — the clock the flash animation runs on, never the freshness one. */
     val receivedAt: Long,
     val tick: Tick = Tick.Flat,
     /** Bumped on every accepted move so the UI can key its animation without comparing floats. */
     val seq: Int = 0,
+    /**
+     * False when the feed gave no publication time and [atMs] holds the receipt time instead.
+     * Freshness cannot be claimed from a timestamp we invented, so the sheet says "age unknown".
+     */
+    val atKnown: Boolean = true,
 )
 
 data class ConvertUi(
@@ -74,14 +79,20 @@ data class ConvertUi(
         ageMs = PriceMotion.ageMs(nowMs, metalMotion.values.maxOfOrNull { it.receivedAt } ?: 0L),
     )
 
+    /** When the provider published this metal's price — null when only its receipt time is known. */
+    fun metalPublishedAt(code: String): Long? = metalMotion[code]?.takeIf { it.atKnown }?.atMs
+
     /**
-     * The feed state of ONE metal. Gold can be live while silver is stale; a single "metals" state
-     * hides that, and the review is right that reporting the newest of the two as both is a claim
-     * the data does not support.
+     * The freshness of ONE metal, measured from ITS publication time.
+     *
+     * Null means "the age is not known": no price at all, or a price whose publication time the
+     * feed never gave. That is a state of its own — the sheet says so — because inventing LIVE from
+     * a timestamp we made up is the same lie as showing a stale price as fresh.
      */
-    fun metalStateOf(code: String, nowMs: Long): FeedState {
-        val metal = metalMotion[code] ?: return FeedState.Offline
-        return PriceMotion.state(hasPrice = true, ageMs = nowMs - metal.receivedAt)
+    fun metalFeed(code: String, nowMs: Long): FeedState? {
+        if (!usdTo.containsKey(code)) return null
+        val publishedAt = metalPublishedAt(code) ?: return null
+        return PriceMotion.state(hasPrice = true, ageMs = nowMs - publishedAt)
     }
 
     /** How a metal's row should look right now — flash only while the animation window is open. */

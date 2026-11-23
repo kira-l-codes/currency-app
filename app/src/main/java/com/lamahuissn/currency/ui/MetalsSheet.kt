@@ -37,27 +37,29 @@ import com.lamahuissn.currency.data.PriceMotion
 fun MetalsSheet(
     code: String,
     rates: Map<String, Double>,
-    updatedAt: Long,
-    metalsAt: Long,
+    /**
+     * This metal's own freshness, measured from its own publication time.
+     * Null means the age is not known — no price, or a price the feed sent without a timestamp.
+     * A fresh gold publication must never make a stale silver sheet look fresh.
+     */
+    feed: FeedState?,
+    /** The provider's publication time, or null when the feed gave none. */
+    publishedAt: Long?,
     onDismiss: () -> Unit,
 ) {
     val ounce = Metals.ounceUsd(rates[code] ?: 0.0)
     val isGold = code == "XAU"
-    // Age decides the label. A number from fifteen minutes ago is not "live" no matter how the last
-    // request ended, and saying so is the whole point of the badge.
-    val feed = PriceMotion.state(
-        hasPrice = ounce > 0.0,
-        ageMs = PriceMotion.ageMs(System.currentTimeMillis(), metalsAt),
-    )
     val feedLabel = when (feed) {
         FeedState.Live -> "LIVE"
         FeedState.Delayed -> "DELAYED"
         FeedState.Offline -> "OFFLINE"
+        null -> "AGE UNKNOWN"
     }
     val feedColor = when (feed) {
         FeedState.Live -> Ink.Green
         FeedState.Delayed -> Ink.Amber
         FeedState.Offline -> Ink.Red
+        null -> Ink.Muted
     }
 
     Box(
@@ -106,8 +108,11 @@ fun MetalsSheet(
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                text = "per troy ounce · USD" +
-                                    if (updatedAt > 0) " · ${CountScreenTime.format(updatedAt)}" else "",
+                                text = "per troy ounce · USD" + when {
+                                    publishedAt != null -> " · ${CountScreenTime.format(publishedAt)}"
+                                    ounce > 0.0 -> " · update time unknown"
+                                    else -> ""
+                                },
                                 color = Color(0xFF93BBA6),
                                 fontSize = 11.sp,
                             )

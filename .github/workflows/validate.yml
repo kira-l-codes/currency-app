@@ -6,6 +6,11 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      prove_failure_path:
+        description: "Deliberately fail the web tests (through tee) to prove the job goes red"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,19 +35,33 @@ jobs:
       - name: Install test dependencies
         run: npm ci --prefix web
 
-      # All three suites, including the whole-app DOM tests: the keypad, Count and the migration
-      # are only really tested when the page is loaded and the buttons are clicked.
+      # `shell: bash` is explicit and `pipefail` is set, because a pipeline returns the status of its
+      # last command — `tee` — which is 0 even when the suite failed. Without this, a red suite could
+      # report a green step.
       - name: Run web tests
+        shell: bash
         run: |
+          set -euo pipefail
           cd web
-          # The default (TAP) reporter, because the count lines it prints are the ones a reader
-          # can verify; the spec reporter prints a different shape and the grep below would miss it.
+          # The default (TAP) reporter, because its `# tests` lines are the ones a reader can verify.
           node --test tests/*.test.mjs 2>&1 | tee /tmp/web-tests.log
+
+      # The failure path is proven on demand, never left in the normal suite: dispatch this workflow
+      # with prove_failure_path=true and this step must fail although its output also goes through tee.
+      - name: Prove the failure path (dispatch only)
+        if: ${{ inputs.prove_failure_path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "this command fails on purpose; the step must still fail through tee"
+          ( echo "deliberate failure"; exit 7 ) 2>&1 | tee /tmp/proven-failure.log
 
       # Printed, not only written to the summary: a number nobody can read in the log is not evidence.
       - name: Report the counts
         if: always()
+        shell: bash
         run: |
+          set -euo pipefail
           COUNTS="$(grep -E '^# (tests|pass|fail)' /tmp/web-tests.log || echo 'no summary lines')"
           printf '%s\n' "$COUNTS"
           {
@@ -89,22 +108,53 @@ jobs:
       - name: Run unit tests
         run: ./gradlew :app:testDebugUnitTest --console=plain
 
-      # The count is read from the JUnit XML, so the number in the summary is the number the runner
-      # actually produced rather than a number someone typed.
+      # Parsed structurally, not with a regex over the first 600 bytes. A missing, malformed or
+      # empty report fails this step: a reassuring "0 tests / 0 failures" would read as coverage
+      # that does not exist. Failures, errors and skips are reported separately.
       - name: Report the counts
         if: always()
         run: |
           python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
-          import glob, re
-          total = failures = 0
-          for path in glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml"):
-              head = open(path).read(600)
-              m = re.search(r'tests="(\d+)".*?failures="(\d+)"', head)
-              if m:
-                  total += int(m.group(1))
-                  failures += int(m.group(2))
+          import glob
+          import sys
+          import xml.etree.ElementTree as ET
+
+          files = sorted(glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml"))
+          totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0}
+          unreadable = []
+
+          for path in files:
+              try:
+                  root = ET.parse(path).getroot()
+              except Exception as exc:                  # malformed XML is a failure, not a zero
+                  unreadable.append(f"{path}: {exc}")
+                  continue
+              suite = root if root.tag == "testsuite" else root.find("testsuite")
+              if suite is None:
+                  unreadable.append(f"{path}: no <testsuite> element")
+                  continue
+              for key in totals:
+                  totals[key] += int(suite.get(key, 0) or 0)
+
           print("### JVM tests\n")
-          print("| tests | failures |")
-          print("| --- | --- |")
-          print(f"| {total} | {failures} |")
+          print(f"reports: {len(files)} files")
+          print("\n| tests | failures | errors | skipped |")
+          print("| --- | --- | --- | --- |")
+          print(f"| {totals['tests']} | {totals['failures']} | {totals['errors']} | {totals['skipped']} |")
+
+          if unreadable:
+              print("\n**Unreadable reports:**")
+              for line in unreadable:
+                  print(f"- {line}")
+
+          if not files:
+              print("\n**No test reports were produced — this is not a passing result.**")
+              sys.exit(1)
+          if unreadable:
+              sys.exit(1)
+          if totals["tests"] == 0:
+              print("\n**Zero tests ran — this is not a passing result.**")
+              sys.exit(1)
+          if totals["failures"] or totals["errors"]:
+              sys.exit(1)
           PY

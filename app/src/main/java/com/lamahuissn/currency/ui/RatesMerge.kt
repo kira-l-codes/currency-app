@@ -31,7 +31,8 @@ object RatesMerge {
         var moved = false
         quotes.forEach { (code, quote) ->
             val before = previous[code]
-            val stamp = quote.atMs.takeIf { it > 0L } ?: receivedAt
+            val published = quote.atMs.takeIf { it > 0L }
+            val stamp = published ?: receivedAt
             // An older or repeated publication is not news: ignore it silently.
             if (!PriceMotion.accept(quote.ounceUsd, stamp, before?.atMs ?: 0L)) return@forEach
             next[code] = MetalMotion(
@@ -40,6 +41,7 @@ object RatesMerge {
                 receivedAt = receivedAt,
                 tick = PriceMotion.tick(before?.ounceUsd, quote.ounceUsd),
                 seq = (before?.seq ?: 0) + 1,
+                atKnown = published != null,
             )
             moved = true
         }
@@ -69,7 +71,9 @@ object RatesMerge {
     fun encodeBook(motion: Map<String, MetalMotion>): String =
         motion.entries
             .filter { it.value.ounceUsd > 0 && it.value.atMs > 0 }
-            .joinToString("\n") { (code, m) -> "$code|${m.ounceUsd}|${m.atMs}|${m.seq}" }
+            .joinToString("\n") { (code, m) ->
+                "$code|${m.ounceUsd}|${m.atMs}|${m.seq}|${if (m.atKnown) 1 else 0}"
+            }
 
     /** Reads [encodeBook] back. A restored price has no direction: nothing moved while we slept. */
     fun decodeBook(raw: String): Map<String, MetalMotion> {
@@ -77,18 +81,22 @@ object RatesMerge {
         val out = LinkedHashMap<String, MetalMotion>()
         raw.split('\n').forEach { line ->
             val parts = line.split('|')
-            if (parts.size != 4) return@forEach
+            if (parts.size < 4) return@forEach
             val code = parts[0].trim()
             val usd = parts[1].toDoubleOrNull() ?: return@forEach
             val at = parts[2].toLongOrNull() ?: return@forEach
             val seq = parts[3].toIntOrNull() ?: return@forEach
+            // A four-field line was written before the flag existed; treat its time as published,
+            // because that is what it meant then.
+            val atKnown = parts.getOrNull(4)?.trim() != "0"
             if (code.isEmpty() || usd <= 0.0 || at <= 0L) return@forEach
             out[code] = MetalMotion(
                 ounceUsd = usd,
                 atMs = at,
-                receivedAt = at,      // the age of the price is the age of its publication
+                receivedAt = at,      // the flash window is dead on a restored price; the age is not
                 tick = Tick.Flat,
                 seq = seq,
+                atKnown = atKnown,
             )
         }
         return out

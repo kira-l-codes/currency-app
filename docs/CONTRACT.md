@@ -87,7 +87,9 @@ version written afterwards is what makes every later load unambiguous. It is not
 
 | Rule | Android | Web | Check |
 | --- | --- | --- | --- |
-| one metal's state is decided from **that** metal's publication age (`metalStateOf`) | ✅ | ❌ the web reports the newest of the two | `MetalBookTest` (Android) |
+| one metal's sheet shows **that** metal's freshness, from **that** metal's publication time (`ConvertScreen` → `MetalsSheet(feed = state.metalFeed(...))`) | ✅ | ❌ the web still reports the newest of the two | `MetalFreshnessTest` |
+| a price that arrived without a provider timestamp reads "age unknown", never `LIVE` | ✅ | ❌ | `MetalFreshnessTest` |
+| a numeric cache with no publication record is "unknown", not fresh | ✅ | partial | `MetalFreshnessTest` |
 | `LIVE` / `DELAYED` / `OFFLINE` for fiat and crypto is decided per source | ❌ one `updatedAt` | ❌ one `updated` | **open (item 10)** |
 | a new receipt is not a new publication | ✅ | ✅ | `motion.test.mjs` |
 | a fresh gold price does not make silver live | ✅ | ✅ | `motion.test.mjs` |
