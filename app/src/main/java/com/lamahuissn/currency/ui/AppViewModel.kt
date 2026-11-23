@@ -84,7 +84,7 @@ data class ConvertUi(
      * arrives between two provider publications changes nothing, and must delete nothing.
      */
     fun metalPrices(motion: Map<String, MetalMotion> = metalMotion): Map<String, Double> =
-        usdTo.filterKeys { Metals.isMetal(it) } + motion.mapValues { Metals.perUsd(it.value.ounceUsd) }
+        RatesMerge.metalPrices(usdTo, motion)
 }
 
 data class ChartUi(
@@ -153,11 +153,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             result.onSuccess { (table, quotes) ->
                 val now = System.currentTimeMillis()
-                val (motion, moved) = mergeMotion(quotes, now)
-                // Metals that did not move still have a price: mergeMotion returns everything known,
-                // not just this round's changes. Returning only the changes deleted gold and silver
-                // from the list on any refresh that landed between two 30-second publications.
-                val withMetals = table + motion.mapValues { Metals.perUsd(it.value.ounceUsd) }
+                val before = _convert.value
+                val (motion, moved) = RatesMerge.motion(before.metalMotion, quotes, now)
+                // Metals that did not move still have a price, and on a cold start they only exist
+                // in the cached table. Building the table from the motion alone deleted gold and
+                // silver whenever the metal fetch failed while fiat succeeded.
+                val withMetals = RatesMerge.table(table, before.usdTo, motion)
                 prefs.cachedRates = withMetals
                 prefs.updatedAt = now
                 _convert.update {
@@ -207,42 +208,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             val at = System.currentTimeMillis()
-            val (motion, moved) = mergeMotion(quotes, at)
+            val before = _convert.value
+            val (motion, moved) = RatesMerge.motion(before.metalMotion, quotes, at)
             if (!moved) return@launch                // same publications: nothing moved, animate nothing
-            val merged = _convert.value.usdTo + motion.mapValues { Metals.perUsd(it.value.ounceUsd) }
+            val merged = RatesMerge.table(before.usdTo, before.usdTo, motion)
             prefs.cachedRates = merged
             _convert.update { it.copy(usdTo = merged, metalsAt = at, metalMotion = motion) }
         }
-    }
-
-    /**
-     * Merges a fresh read with what is already on screen. A publication the app has not seen is
-     * accepted, given a direction against the previous price and a new sequence number; a repeated
-     * publication changes nothing and animates nothing.
-     *
-     * Returns **everything known**, plus whether anything moved. The earlier version returned only
-     * the changes, and an empty result was then written into the state — so a refresh that landed
-     * between two 30-second publications removed gold and silver from the list entirely.
-     */
-    private fun mergeMotion(quotes: Map<String, Metals.Quote>, receivedAt: Long): Pair<Map<String, MetalMotion>, Boolean> {
-        val current = _convert.value.metalMotion
-        if (quotes.isEmpty()) return current to false
-        val next = current.toMutableMap()
-        var moved = false
-        quotes.forEach { (code, quote) ->
-            val previous = current[code]
-            val stamp = quote.atMs.takeIf { it > 0L } ?: receivedAt
-            if (!PriceMotion.accept(quote.ounceUsd, stamp, previous?.atMs ?: 0L)) return@forEach
-            next[code] = MetalMotion(
-                ounceUsd = quote.ounceUsd,
-                atMs = stamp,
-                receivedAt = receivedAt,
-                tick = PriceMotion.tick(previous?.ounceUsd, quote.ounceUsd),
-                seq = (previous?.seq ?: 0) + 1,
-            )
-            moved = true
-        }
-        return next to moved
     }
 
     /**

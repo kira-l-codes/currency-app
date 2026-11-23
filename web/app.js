@@ -7,7 +7,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "web 1.7";
+  const VERSION = "web 1.8";
 
   /* ── catalogue ───────────────────────────────────────────────────────────── */
   const CAT = {
@@ -106,7 +106,7 @@
     if (!sym || /^[A-Z]{3}$/.test(sym)) return "";
     return /[^\x00-\x7F]/.test(sym) ? sym + " " : sym;
   };
-  const signed = (code, amount) => symPrefix(code) + money(amount);
+  const signed = (code, amount) => symPrefix(code) + figure(amount);
   const signedWhole = (code, amount) => symPrefix(code) + whole(amount);
 
   /* ── the one money convention ────────────────────────────────────────────── */
@@ -165,42 +165,16 @@
   const METALS_LABEL = { live: "live", delayed: "delayed", offline: "offline" };
 
   /* ── expression parser ───────────────────────────────────────────────────── */
-  function evaluate(raw) {
-    // Android trims a dangling operator before parsing, so `5 +` means 5. Matching that here keeps
-    // a half-typed sum from being rejected on one build and accepted on the other.
-    const src = String(raw)
-      .replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-").replace(/,/g, "")
-      .trim()
-      .replace(/[+\-*/−×÷ ]+$/, "");
-    if (!src) return null;
-    const tokens = src.match(/\d*\.?\d+|[+\-*/()]/g);
-    if (!tokens || tokens.join("") !== src.replace(/\s+/g, "")) return null;
-    let i = 0;
-    const peek = () => tokens[i];
-    function primary() {
-      const t = tokens[i];
-      if (t === "(") { i++; const v = expr(); if (tokens[i] !== ")") throw 0; i++; return v; }
-      if (t === "-") { i++; return -primary(); }
-      if (t === undefined || !/^\d/.test(t)) throw 0;
-      i++; const v = Number(t); if (!Number.isFinite(v)) throw 0; return v;
-    }
-    function term() {
-      let v = primary();
-      while (peek() === "*" || peek() === "/") {
-        const op = tokens[i++]; const r = primary();
-        if (op === "/" && r === 0) throw 0;
-        v = op === "*" ? v * r : v / r;
-      }
-      return v;
-    }
-    const expr = () => { let v = term(); while (peek() === "+" || peek() === "-") { const op = tokens[i++]; const r = term(); v = op === "+" ? v + r : v - r; } return v; };
-    try { const v = expr(); return i === tokens.length && Number.isFinite(v) ? v : null; } catch { return null; }
-  }
+  /* ── expression parser ───────────────────────────────────────────────────── */
+  // The rules live in web/logic.js so the browser and the tests run the same code.
+  const L = window.Logic;
+  const evaluate = (raw) => L.evaluate(raw);
+  const figure = (v) => L.formatFigure(v);
 
-  /* ── persistence ─────────────────────────────────────────────────────────── */
   function saveState() {
     try {
       localStorage.setItem(STORE, JSON.stringify({
+        v: L.STATE_VERSION,
         base: state.base, amount: state.amount, order: state.order, pinned: state.pinned,
         screen: state.screen,        chart: state.chart, count: state.count,
         rates: state.rates, metals: state.metals, updated: state.updated,
@@ -212,7 +186,8 @@
     try {
       const raw = localStorage.getItem(STORE);
       if (!raw) return;
-      const s = JSON.parse(raw);
+      // The record carries its own version; older shapes are upgraded by name, not by guessing.
+      const s = L.migrateRecord(JSON.parse(raw));
       if (s.base && CAT[s.base]) state.base = s.base;
       if (typeof s.amount === "number" && s.amount > 0) state.amount = s.amount;
       if (Array.isArray(s.order) && s.order.length) state.order = s.order.filter((c) => CAT[c]);
@@ -228,15 +203,7 @@
         };
       }
       if (s.rates) state.rates = { ...state.rates, ...s.rates };
-      if (s.metals) {
-        // 1.3 stored the dollar price of an ounce here; the table now means ounces per dollar.
-        // An ounce price is >= 1 and a unit rate never is, so an old value is simply inverted.
-        state.metals = {};
-        Object.entries(s.metals).forEach(([code, v]) => {
-          if (!(v > 0)) return;
-          state.metals[code] = v >= 1 ? 1 / v : v;
-        });
-      }
+      if (s.metals) state.metals = s.metals;   // already in ounces-per-dollar after migrateRecord
       // A stored publication time lets the first paint say DELAYED instead of pretending.
       if (s.metalMeta) state.metalMeta = s.metalMeta;
       if (s.updated) state.updated = s.updated;
@@ -277,12 +244,13 @@
       : "0";
     const solved = evaluate(entry);
     $("kpValue").textContent = solved != null && /[+\-*/]/.test(entry)
-      ? shown + " = " + money(solved)
+      ? shown + " = " + figure(solved)
       : shown;
   }
 
   function openKeypad(opts) {
     kpMode = opts.mode || "amount";
+    setKeypadMode(kpMode === "quantity");
     kpCommit = opts.onCommit;
     $("kpFlag").textContent = flagOf(opts.code) || "¤";
     $("kpName").textContent = opts.title || nameOf(opts.code);
@@ -296,42 +264,16 @@
   }
   function closeKeypad() { $("keypad").classList.remove("open"); }
 
+  /** Count replaces the pre-filled quantity on the first digit; Convert appends to the amount. */
+  function setKeypadMode(replaceFirst) { replaceOnFirstDigit = Boolean(replaceFirst); }
+
+  // Convert appends to the number, Count replaces it on the first digit — Android does both, and
+  // the difference is a parameter rather than two copies of the same rules.
+  let replaceOnFirstDigit = false;
   function press(key) {
-    if (key === "C") { entry = ""; fresh = false; paintKeypad(); return; }
-    if (key === "back") { entry = entry.slice(0, -1); fresh = false; paintKeypad(); return; }
-    if (key === "1K" || key === "100" || key === "10") {
-      // The shortcuts REPLACE the entry, they do not append zeros: the Android keypad sets 1000 /
-      // 100 / 10 outright, and the two builds have to behave the same way for the same tap.
-      entry = { "1K": "1000", "100": "100", "10": "10" }[key];
-      fresh = false;
-      paintKeypad();
-      return;
-    }
-    if (fresh && /^[0-9.]$/.test(key)) entry = "";
-    fresh = false;
-
-    // The pad types the symbols it shows (× ÷ −) and the parser understands them, so the rules are
-    // written in that alphabet too — mixing in ASCII here is what made `5 − 3` unreadable.
-    const isOp = (c) => c.length === 1 && "+−×÷".indexOf(c) >= 0;
-    const last = entry.slice(-1);
-    const MAX = 24;
-
-    if (isOp(key)) {
-      // Android: an operator on an empty entry does nothing, and an operator after an operator
-      // replaces it rather than stacking `5+-`.
-      if (!entry) { paintKeypad(); return; }
-      entry = isOp(last) ? entry.slice(0, -1) + key : (entry + key).slice(0, MAX);
-      paintKeypad();
-      return;
-    }
-
-    const operand = entry.split(/[+−×÷]/).pop();
-    if (key === "." && operand.indexOf(".") >= 0) { paintKeypad(); return; }
-    if (key === "." && (!entry || isOp(last))) entry += "0.";
-    else if (isOp(last)) entry += key;
-    else if (entry === "0" && key !== ".") entry = key;   // a leading zero never accumulates
-    else if (entry.length >= MAX) { paintKeypad(); return; }
-    else entry += key;
+    const out = L.pressKey(entry, key, { fresh, replace: replaceOnFirstDigit });
+    entry = out.entry;
+    fresh = out.fresh;
     paintKeypad();
   }
 
