@@ -67,6 +67,18 @@ class Prefs(context: Context) {
             sp.edit().putString("rates", json.toString()).apply()
         }
 
+    /**
+     * What each metal's last accepted publication said, so a restart can tell the row's age and
+     * refuse an older publication instead of accepting it as new. One line per metal:
+     * `CODE|ounceUsd|publishedAtMs|seq`.
+     *
+     * The numeric rate in [cachedRates] alone lost the publication time, which is why a restarted
+     * app could not say how old gold was, and why the first refresh after a restart looked like news.
+     */
+    var metalBook: String
+        get() = sp.getString("metalBook", "") ?: ""
+        set(value) = sp.edit().putString("metalBook", value).apply()
+
     var chartBase: String
         get() = sp.getString("chartBase", "EUR") ?: "EUR"
         set(value) = sp.edit().putString("chartBase", value).apply()

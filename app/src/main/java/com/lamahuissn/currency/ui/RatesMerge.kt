@@ -61,6 +61,40 @@ object RatesMerge {
     }
 
     /**
+     * The metal book as one stored line per metal: `CODE|ounceUsd|publishedAtMs|seq`.
+     *
+     * The numeric rate table alone cannot answer "how old is this gold price", so the publication
+     * time has to be stored with it. Anything unreadable is dropped rather than guessed at.
+     */
+    fun encodeBook(motion: Map<String, MetalMotion>): String =
+        motion.entries
+            .filter { it.value.ounceUsd > 0 && it.value.atMs > 0 }
+            .joinToString("\n") { (code, m) -> "$code|${m.ounceUsd}|${m.atMs}|${m.seq}" }
+
+    /** Reads [encodeBook] back. A restored price has no direction: nothing moved while we slept. */
+    fun decodeBook(raw: String): Map<String, MetalMotion> {
+        if (raw.isBlank()) return emptyMap()
+        val out = LinkedHashMap<String, MetalMotion>()
+        raw.split('\n').forEach { line ->
+            val parts = line.split('|')
+            if (parts.size != 4) return@forEach
+            val code = parts[0].trim()
+            val usd = parts[1].toDoubleOrNull() ?: return@forEach
+            val at = parts[2].toLongOrNull() ?: return@forEach
+            val seq = parts[3].toIntOrNull() ?: return@forEach
+            if (code.isEmpty() || usd <= 0.0 || at <= 0L) return@forEach
+            out[code] = MetalMotion(
+                ounceUsd = usd,
+                atMs = at,
+                receivedAt = at,      // the age of the price is the age of its publication
+                tick = Tick.Flat,
+                seq = seq,
+            )
+        }
+        return out
+    }
+
+    /**
      * The table after a refresh: the fiat/crypto answer as the base, then the metals carried over
      * from the previous table unless a newer publication replaced them.
      */

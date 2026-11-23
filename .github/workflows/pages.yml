@@ -27,9 +27,17 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      # The price-motion rules ship to the browser and are asserted here before anything deploys.
-      - name: Price motion rules
-        run: node --test web/tests/motion.test.mjs
+      # Nothing deploys unless the rules the page runs have passed: the shared logic, the price
+      # motion, and the whole-app DOM tests that click the real buttons.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install test dependencies
+        run: npm ci --prefix web
+      - name: Web suites
+        run: node --test web/tests/*.test.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

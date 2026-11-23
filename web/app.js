@@ -103,8 +103,13 @@
   const whole = (v) => v.toLocaleString("en-US", { maximumFractionDigits: 0 });
   const symPrefix = (code) => {
     const sym = symOf(code);
-    if (!sym || /^[A-Z]{3}$/.test(sym)) return "";
-    return /[^\x00-\x7F]/.test(sym) ? sym + " " : sym;
+    if (!sym) return "";
+    // Three-letter codes (CHF, AED) are the symbol for those currencies; dropping them left a badge
+    // that read as a number with no currency. Android also spaces a symbol when its last character
+    // is a letter or it is longer than two characters, so "ل.ل" is spaced and "¥" is tight.
+    if (/^[A-Z]{3}$/.test(sym)) return sym + " ";
+    const last = sym.slice(-1);
+    return /[A-Za-z]/.test(last) || sym.length > 2 ? sym + " " : sym;
   };
   const signed = (code, amount) => symPrefix(code) + figure(amount);
   const signedWhole = (code, amount) => symPrefix(code) + whole(amount);
@@ -663,7 +668,7 @@
 
   /* ── expose + boot ───────────────────────────────────────────────────────── */
   window.App = {
-    state, CAT, DENOMS, FLAG, VERSION, flagOf, nameOf, symOf,    money, money2, whole, signed, signedWhole,
+    state, CAT, DENOMS, FLAG, VERSION, flagOf, nameOf, symOf,    money, money2, whole, figure, signed, signedWhole,
     perUsd, convert, toUsd, evaluate, toast, saveState, setScreen,
     sheetOpen, sheetClose, openKeypad, openPicker, renderAll, renderList, loadRates,
     // Exposed for the ticker's own use and for the browser checks that drive a price move.

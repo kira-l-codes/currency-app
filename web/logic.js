@@ -33,7 +33,9 @@
     else if (abs >= 0.01) dp = 4;
     else dp = 8;
 
-    if (abs !== 0 && abs < 1e-8) return "<0.00000001";
+    // 8 decimals is the narrowest we print, so anything below half of that last digit would read
+    // as 0.00000000 — say so instead of printing a zero that is not there.
+    if (abs !== 0 && abs < 5e-9) return "<0.00000001";
 
     let text = value.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
     const dot = text.indexOf(".");
@@ -50,11 +52,21 @@
    */
   function evaluate(raw) {
     if (raw == null) return null;
-    const src = String(raw)
+    let src = String(raw)
       .replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-").replace(/,/g, "")
-      .trim()
-      .replace(/[+\-*/.]+$/, "");
+      .trim();
     if (!src) return null;
+
+    // `5..` is not a number that lost a digit, it is malformed input: reject it in the function
+    // itself, not only in the keypad that happens to mask it.
+    if (src.split(/[+\-*/()]/).some((operand) => (operand.match(/\./g) || []).length > 1)) return null;
+
+    // A dangling point is a valid operand wherever it appears: `5.×3`, `5.+3`, `5.÷2`, `5.−3`,
+    // and a trailing `5.`. Android's tokenizer reads all of them, so this build must too.
+    src = src
+      .replace(/(\d)\.(?=[+\-*/)])/g, "$1")
+      .replace(/(\d)\.$/, "$1")
+      .replace(/[+\-*/]+$/, "");
 
     const tokens = src.match(/\d*\.?\d+|[+\-*/()]/g);
     if (!tokens || tokens.join("") !== src.replace(/\s+/g, "")) return null;
@@ -136,20 +148,29 @@
     if (isOp(key)) {
       if (!text) return { entry: text, fresh };
       const last = text.slice(-1);
-      return { entry: isOp(last) ? text.slice(0, -1) + key : (text + key).slice(0, MAX_ENTRY), fresh };
+      if (isOp(last)) return { entry: text.slice(0, -1) + key, fresh };
+      if (text.length >= MAX_ENTRY) return { entry: text, fresh };
+      return { entry: text + key, fresh };
     }
 
     if (isDot) {
       const operand = text.split(/[+−×÷]/).pop();
       if (operand.indexOf(".") >= 0) return { entry: text, fresh };
-      if (!text || isOp(text.slice(-1))) return { entry: text + "0.", fresh };
+      if (!text || isOp(text.slice(-1))) {
+        if (text.length + 2 > MAX_ENTRY) return { entry: text, fresh };
+        return { entry: text + "0.", fresh };
+      }
+      if (text.length >= MAX_ENTRY) return { entry: text, fresh };
       return { entry: text + ".", fresh };
     }
 
     if (!isDigit) return { entry: text, fresh };
 
     const last = text.slice(-1);
-    if (isOp(last)) return { entry: text + key, fresh };
+    if (isOp(last)) {
+      if (text.length >= MAX_ENTRY) return { entry: text, fresh };
+      return { entry: text + key, fresh };
+    }
     if (text === "0") return { entry: key, fresh };
     if (text.length >= MAX_ENTRY) return { entry: text, fresh };
     return { entry: text + key, fresh };

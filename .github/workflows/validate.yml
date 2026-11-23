@@ -1,0 +1,103 @@
+name: validate
+
+# Verification only. Nothing here tags, publishes, deploys or builds a release APK: the web suites and
+# the JVM tests run on every push so a regression cannot hide behind a green release run.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web suites (logic, motion, DOM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install test dependencies
+        run: npm ci --prefix web
+
+      # All three suites, including the whole-app DOM tests: the keypad, Count and the migration
+      # are only really tested when the page is loaded and the buttons are clicked.
+      - name: Run web tests
+        run: |
+          cd web
+          node --test --test-reporter=spec tests/*.test.mjs 2>&1 | tee /tmp/web-tests.log
+
+      - name: Report the counts
+        if: always()
+        run: |
+          echo "### Web tests" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^# (tests|pass|fail)" /tmp/web-tests.log >> "$GITHUB_STEP_SUMMARY" || echo "no summary lines" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  android:
+    name: JVM unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Android SDK packages
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          SDKM="$(command -v sdkmanager || true)"
+          if [ -z "$SDKM" ]; then
+            SDKM="$(ls -d "$SDK"/cmdline-tools/*/bin/sdkmanager | head -1)"
+          fi
+          yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+          "$SDKM" "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', 'gradle/wrapper/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Run unit tests
+        run: ./gradlew :app:testDebugUnitTest --console=plain
+
+      # The count is read from the JUnit XML, so the number in the summary is the number the runner
+      # actually produced rather than a number someone typed.
+      - name: Report the counts
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import glob, re
+          total = failures = 0
+          for path in glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml"):
+              head = open(path).read(600)
+              m = re.search(r'tests="(\d+)".*?failures="(\d+)"', head)
+              if m:
+                  total += int(m.group(1))
+                  failures += int(m.group(2))
+          print("### JVM tests\n")
+          print("| tests | failures |")
+          print("| --- | --- |")
+          print(f"| {total} | {failures} |")
+          PY

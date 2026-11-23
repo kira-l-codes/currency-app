@@ -7,7 +7,7 @@ Every row carries three things: the rule, **where each build stands today**, and
 holds it. A row with no check is a wish, not a rule. This file is not a claim that the two builds are
 identical; the open items at the bottom are the proof that they are not, yet.
 
-Reference: branch `parity/batch-1`, after `5ee4819`.
+Reference: branch `parity/batch-1`, after `8fb14ad` (the first batch review).
 
 ---
 
@@ -23,7 +23,7 @@ Reference: branch `parity/batch-1`, after `5ee4819`.
 | operator on an empty entry | ignored | ✅ | ✅ | `logic.test.mjs` |
 | operator after an operator | replaces it (`5 + − 3` → `5−3`) | ✅ | ✅ | `logic.test.mjs` |
 | leading zero | never accumulates | ✅ | ✅ | `logic.test.mjs` |
-| length | 24 characters | ✅ | ✅ | `logic.test.mjs` |
+| length | 24 characters, **on every path** (a dot at 24 and a digit after an operator are refused) | ✅ | ✅ | `logic.test.mjs`, `keypad.dom.test.mjs` |
 | symbols | the pad types `× ÷ −`, and the parser reads those | ✅ | ✅ | `logic.test.mjs` |
 
 The earlier version of this file claimed Convert **replaced** on the first digit. That was wrong
@@ -34,7 +34,8 @@ about Android and wrong about the web; both append. Count is the one that replac
 | Rule | Android | Web | Check |
 | --- | --- | --- | --- |
 | a dangling operator is not an error (`5+` = 5) | ✅ | ✅ | `logic.test.mjs` |
-| a dangling point is not an error (`5.` = 5, `0.` = 0, `5+3.` = 8) | ✅ | ✅ | `logic.test.mjs` |
+| a dangling point is not an error **anywhere** (`5.` = 5, `0.` = 0, `5+3.` = 8, `5.×3` = 15, `5.+3` = 8, `5.÷2` = 2.5, `5.−3` = 2) | ✅ | ✅ | `logic.test.mjs`, `keypad.dom.test.mjs` |
+| malformed input (`5..`) is rejected by the evaluator itself, not only by the keypad | ✅ | ✅ | `logic.test.mjs` |
 | `×` and `÷` bind tighter than `+` and `−` | ✅ | ✅ | `logic.test.mjs` |
 | division by zero is "no value", never `0` or `Infinity` | ✅ | ✅ | `logic.test.mjs` |
 | unparseable text is "no value" | ✅ | ✅ | `logic.test.mjs` |
@@ -44,7 +45,8 @@ about Android and wrong about the web; both append. Count is the one that replac
 | Rule | Android | Web | Check |
 | --- | --- | --- | --- |
 | 2 decimals from 100 up, 3 from 1, 4 from 0.01, 8 below, trailing zeros trimmed to a minimum of 2 | ✅ `Format.formatValue` | ✅ `Logic.formatFigure` | `logic.test.mjs` |
-| a nonzero value never renders as `0.00`; below 8 decimals it reads `<0.00000001` | ✅ by the 8-decimal pattern | ✅ | `logic.test.mjs` |
+| a nonzero value never renders as `0.00`; below 8 decimals it reads `<0.00000001` | ✅ `Format.kt` | ✅ | `logic.test.mjs`, `keypad.dom.test.mjs` |
+| a three-letter code keeps its place in the badge (`CHF 10.00`, `AED 10.00`); a one-character symbol stays tight (`¥10.00`); a symbol longer than two characters is spaced (`ل.ل 8,950,000.00`) | ✅ | ✅ | `keypad.dom.test.mjs` |
 | `NaN` / `Infinity` render `—` | ✅ | ✅ | `logic.test.mjs` |
 | an amount is stored as text in Android, so `1,234,567.89` returns unchanged | ✅ | n/a (JSON number) | `PrefsPrecisionTest` |
 
@@ -75,7 +77,9 @@ version written afterwards is what makes every later load unambiguous. It is not
 | a row shows the ounce price (`$3,620.00 / oz`), never the rate | ✅ | ✅ | browser run |
 | a publication is accepted only if it is newer than the last one | ✅ | ✅ | `RatesMergeTest`, `motion.test.mjs` |
 | a duplicate publication moves nothing and flashes nothing | ✅ | ✅ | `RatesMergeTest`, `motion.test.mjs` |
-| a refresh with **no** metal publication keeps the prices already known | ✅ `RatesMerge.table` | ✅ | `RatesMergeTest` |
+| a refresh that brings **no** metal publication keeps the prices already known | ✅ `RatesMerge.table` | ✅ | `RatesMergeTest` |
+| a publication's **time** survives a restart, so the row can say how old it is and an old price is not accepted as news | ✅ `Prefs.metalBook` | ✅ `metalMeta` in the record | `MetalBookTest` |
+| the metal book is written on every accepted publication | ✅ | ✅ | `MetalBookTest` |
 | a fiat success does not invent a metal price, and a metal failure does not empty the fiat list | ✅ | ✅ | `RatesMergeTest` |
 | an empty metal feed never deletes a cached gold or silver price | ✅ | ✅ | `RatesMergeTest` |
 
@@ -83,7 +87,8 @@ version written afterwards is what makes every later load unambiguous. It is not
 
 | Rule | Android | Web | Check |
 | --- | --- | --- | --- |
-| `LIVE` / `DELAYED` / `OFFLINE` is decided per source, from the age of the **publication** | metals ✅, fiat partial | metals ✅, fiat partial | `motion.test.mjs` |
+| one metal's state is decided from **that** metal's publication age (`metalStateOf`) | ✅ | ❌ the web reports the newest of the two | `MetalBookTest` (Android) |
+| `LIVE` / `DELAYED` / `OFFLINE` for fiat and crypto is decided per source | ❌ one `updatedAt` | ❌ one `updated` | **open (item 10)** |
 | a new receipt is not a new publication | ✅ | ✅ | `motion.test.mjs` |
 | a fresh gold price does not make silver live | ✅ | ✅ | `motion.test.mjs` |
 | fiat, crypto, gold and silver are still one timestamp in places | ❌ | ❌ | **open (item 10)** |
@@ -121,7 +126,9 @@ version written afterwards is what makes every later load unambiguous. It is not
 
 ## 10. What this file cannot claim
 
-The rows above are backed by the tests named in them, and those tests pass as of this reference.
+The rows above are backed by the tests named in them. They run in CI (`validate.yml`, verification
+only — no tag, no deploy), and the counts reported in a hand-off are the ones that job printed, not a
+number typed from a local run.
 They do **not** cover the open items, the visual parity work, or the Android experience on a real
 device: the APK has been exercised on the owner's phone, but not in this review pass, and no emulator
 is available here.

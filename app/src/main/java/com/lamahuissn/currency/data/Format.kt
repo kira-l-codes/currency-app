@@ -12,6 +12,9 @@ import kotlin.math.abs
  */
 fun formatValue(value: Double): String {
     if (value.isNaN() || value.isInfinite()) return "—"
+    // Eight decimals is the narrowest this prints, so anything below half of that last digit would
+    // read as 0.00000000. Say so rather than print a zero that is not there.
+    if (value != 0.0 && abs(value) < 5e-9) return "<0.00000001"
     val pattern = when {
         value == 0.0 -> "#,##0.00"
         abs(value) >= 100.0 -> "#,##0.00"

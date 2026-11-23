@@ -1,0 +1,14 @@
+{
+  "name": "currency-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The installable web build: shell, shared rules, and the tests that hold them",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "devDependencies": {
+    "jsdom": "^31.0.1"
+  }
+}

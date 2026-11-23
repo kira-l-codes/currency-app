@@ -74,6 +74,16 @@ data class ConvertUi(
         ageMs = PriceMotion.ageMs(nowMs, metalMotion.values.maxOfOrNull { it.receivedAt } ?: 0L),
     )
 
+    /**
+     * The feed state of ONE metal. Gold can be live while silver is stale; a single "metals" state
+     * hides that, and the review is right that reporting the newest of the two as both is a claim
+     * the data does not support.
+     */
+    fun metalStateOf(code: String, nowMs: Long): FeedState {
+        val metal = metalMotion[code] ?: return FeedState.Offline
+        return PriceMotion.state(hasPrice = true, ageMs = nowMs - metal.receivedAt)
+    }
+
     /** How a metal's row should look right now — flash only while the animation window is open. */
     fun motionOf(code: String, nowMs: Long): MetalMotion? = metalMotion[code]
         ?.takeIf { it.tick != Tick.Flat && nowMs - it.receivedAt in 0..PriceMotion.FLASH_MS }
@@ -116,6 +126,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             soundOn = prefs.soundOn,
             usdTo = prefs.cachedRates,
             updatedAt = prefs.updatedAt,
+            metalMotion = RatesMerge.decodeBook(prefs.metalBook),
         )
     )
     val convert: StateFlow<ConvertUi> = _convert.asStateFlow()
@@ -160,6 +171,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // silver whenever the metal fetch failed while fiat succeeded.
                 val withMetals = RatesMerge.table(table, before.usdTo, motion)
                 prefs.cachedRates = withMetals
+                prefs.metalBook = RatesMerge.encodeBook(motion)
                 prefs.updatedAt = now
                 _convert.update {
                     it.copy(
@@ -213,6 +225,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (!moved) return@launch                // same publications: nothing moved, animate nothing
             val merged = RatesMerge.table(before.usdTo, before.usdTo, motion)
             prefs.cachedRates = merged
+            prefs.metalBook = RatesMerge.encodeBook(motion)
             _convert.update { it.copy(usdTo = merged, metalsAt = at, metalMotion = motion) }
         }
     }
