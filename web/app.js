@@ -7,7 +7,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "web 1.6";
+  const VERSION = "web 1.7";
 
   /* ── catalogue ───────────────────────────────────────────────────────────── */
   const CAT = {
@@ -166,7 +166,12 @@
 
   /* ── expression parser ───────────────────────────────────────────────────── */
   function evaluate(raw) {
-    const src = String(raw).replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-").replace(/,/g, "").trim();
+    // Android trims a dangling operator before parsing, so `5 +` means 5. Matching that here keeps
+    // a half-typed sum from being rejected on one build and accepted on the other.
+    const src = String(raw)
+      .replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-").replace(/,/g, "")
+      .trim()
+      .replace(/[+\-*/−×÷ ]+$/, "");
     if (!src) return null;
     const tokens = src.match(/\d*\.?\d+|[+\-*/()]/g);
     if (!tokens || tokens.join("") !== src.replace(/\s+/g, "")) return null;
@@ -304,8 +309,29 @@
     }
     if (fresh && /^[0-9.]$/.test(key)) entry = "";
     fresh = false;
-    if (/[+\-*/]/.test(key) && /[+\-*/]$/.test(entry)) entry = entry.slice(0, -1);
-    entry += key;
+
+    // The pad types the symbols it shows (× ÷ −) and the parser understands them, so the rules are
+    // written in that alphabet too — mixing in ASCII here is what made `5 − 3` unreadable.
+    const isOp = (c) => c.length === 1 && "+−×÷".indexOf(c) >= 0;
+    const last = entry.slice(-1);
+    const MAX = 24;
+
+    if (isOp(key)) {
+      // Android: an operator on an empty entry does nothing, and an operator after an operator
+      // replaces it rather than stacking `5+-`.
+      if (!entry) { paintKeypad(); return; }
+      entry = isOp(last) ? entry.slice(0, -1) + key : (entry + key).slice(0, MAX);
+      paintKeypad();
+      return;
+    }
+
+    const operand = entry.split(/[+−×÷]/).pop();
+    if (key === "." && operand.indexOf(".") >= 0) { paintKeypad(); return; }
+    if (key === "." && (!entry || isOp(last))) entry += "0.";
+    else if (isOp(last)) entry += key;
+    else if (entry === "0" && key !== ".") entry = key;   // a leading zero never accumulates
+    else if (entry.length >= MAX) { paintKeypad(); return; }
+    else entry += key;
     paintKeypad();
   }
 
