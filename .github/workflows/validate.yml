@@ -35,7 +35,9 @@ jobs:
       - name: Run web tests
         run: |
           cd web
-          node --test --test-reporter=spec tests/*.test.mjs 2>&1 | tee /tmp/web-tests.log
+          # The default (TAP) reporter, because the count lines it prints are the ones a reader
+          # can verify; the spec reporter prints a different shape and the grep below would miss it.
+          node --test tests/*.test.mjs 2>&1 | tee /tmp/web-tests.log
 
       # Printed, not only written to the summary: a number nobody can read in the log is not evidence.
       - name: Report the counts
