@@ -7,7 +7,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "web 1.4";
+  const VERSION = "web 1.5";
 
   /* ── catalogue ───────────────────────────────────────────────────────────── */
   const CAT = {
@@ -223,7 +223,15 @@
         };
       }
       if (s.rates) state.rates = { ...state.rates, ...s.rates };
-      if (s.metals) state.metals = s.metals;
+      if (s.metals) {
+        // 1.3 stored the dollar price of an ounce here; the table now means ounces per dollar.
+        // An ounce price is >= 1 and a unit rate never is, so an old value is simply inverted.
+        state.metals = {};
+        Object.entries(s.metals).forEach(([code, v]) => {
+          if (!(v > 0)) return;
+          state.metals[code] = v >= 1 ? 1 / v : v;
+        });
+      }
       // A stored publication time lets the first paint say DELAYED instead of pretending.
       if (s.metalMeta) state.metalMeta = s.metalMeta;
       if (s.updated) state.updated = s.updated;
