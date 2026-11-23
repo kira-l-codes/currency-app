@@ -7,7 +7,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "web 1.5";
+  const VERSION = "web 1.6";
 
   /* ── catalogue ───────────────────────────────────────────────────────────── */
   const CAT = {
@@ -498,7 +498,9 @@
     if (code === state.base) {
       value.textContent = symPrefix(code) + money(state.amount);
     } else if (p && (code === "XAU" || code === "XAG")) {
-      value.textContent = "$" + money2(p) + " / oz";
+      // One pill format only. This branch used to print `p` — the unit rate — as if it were the
+      // ounce price, so gold read "$0.00 / oz" until the next tick repainted it.
+      value.textContent = metalPillText(code);
     } else if (p) {
       value.textContent = signed(code, convert(state.amount, state.base, code));
     } else {
