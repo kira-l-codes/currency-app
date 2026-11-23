@@ -11,6 +11,10 @@ on:
         description: "Deliberately fail the web tests (through tee) to prove the job goes red"
         type: boolean
         default: false
+      prove_missing_reports:
+        description: "Point the JVM reporter at an empty directory to prove a zero cannot look green"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -111,15 +115,23 @@ jobs:
       # Parsed structurally, not with a regex over the first 600 bytes. A missing, malformed or
       # empty report fails this step: a reassuring "0 tests / 0 failures" would read as coverage
       # that does not exist. Failures, errors and skips are reported separately.
+      # No pipe here on purpose: `python3 ... | tee` would hand the step tee's status, so a missing
+      # report could exit 0. `set -e` plus a plain redirect makes the script's status the step's.
       - name: Report the counts
         if: always()
+        shell: bash
+        env:
+          RESULTS_DIR: ${{ inputs.prove_missing_reports && 'app/build/test-results/EMPTY' || 'app/build/test-results/testDebugUnitTest' }}
         run: |
-          python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          python3 - <<'PY' > /tmp/jvm-counts.txt
           import glob
+          import os
           import sys
           import xml.etree.ElementTree as ET
 
-          files = sorted(glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml"))
+          results = os.environ.get("RESULTS_DIR", "app/build/test-results/testDebugUnitTest")
+          files = sorted(glob.glob(f"{results}/TEST-*.xml"))
           totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0}
           unreadable = []
 
@@ -158,3 +170,5 @@ jobs:
           if totals["failures"] or totals["errors"]:
               sys.exit(1)
           PY
+          cat /tmp/jvm-counts.txt
+          cat /tmp/jvm-counts.txt >> "$GITHUB_STEP_SUMMARY"
