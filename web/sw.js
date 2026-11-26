@@ -11,7 +11,7 @@
  * Bump CACHE whenever the shell changes — the HTML and JS are served from this cache, so a stale
  * version string means users keep the old build until they clear site data.
  */
-const CACHE = "currency-shell-v21";
+const CACHE = "currency-shell-v22";
 const SHELL = [
   "./",
   "./index.html",
@@ -19,6 +19,7 @@ const SHELL = [
   "./motion.js",
   "./logic.js",
   "./app.js",
+  "./screens.js",
   "./manifest.webmanifest",
   "./icon-192.png",
   "./icon-512.png",
