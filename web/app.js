@@ -765,33 +765,38 @@
     li.appendChild(main);
     li.appendChild(el("div", "handle", "≡"));
     let startY = 0, acc = 0, active = false;
-    li.addEventListener("pointerdown", (e) => {
-      active = true; startY = e.clientY; acc = 0;
-      li.classList.add("dragging");
-      try { li.setPointerCapture(e.pointerId); } catch (err) { /* synthetic events */ }
-      haptic(18);
-    });
-    li.addEventListener("pointermove", (e) => {
+    // The node is moved in the DOM while dragging, which drops pointer capture, so the gesture
+    // listens on the document instead and keeps going however many rows it crosses.
+    const onMove = (e) => {
       if (!active) return;
       acc += e.clientY - startY; startY = e.clientY;
       const rowH = li.getBoundingClientRect().height || 65;
       const steps = Math.trunc(acc / rowH);
-      if (steps !== 0) {
-        const list = visibleTargets();
-        const from = list.indexOf(code);
-        const to = Math.max(0, Math.min(list.length - 1, from + steps));
-        if (to !== from && moveRow(code, list[to])) {
-          acc -= steps * rowH;
-          // Move the node itself, so the gesture in progress keeps its row.
-          const ul = li.parentNode;
-          const target = ul.querySelector('[data-code="' + list[to] + '"]');
-          if (target) ul.insertBefore(li, to > from ? target.nextSibling : target);
-        }
+      if (steps === 0) return;
+      const list = visibleTargets();
+      const from = list.indexOf(code);
+      const to = Math.max(0, Math.min(list.length - 1, from + steps));
+      if (to !== from && moveRow(code, list[to])) {
+        acc -= (to - from) * rowH;
+        const ul = li.parentNode;
+        const target = ul.querySelector('[data-code="' + list[to] + '"]');
+        if (target) ul.insertBefore(li, to > from ? target.nextSibling : target);
       }
+    };
+    const stop = () => {
+      active = false; li.classList.remove("dragging");
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", stop);
+      document.removeEventListener("pointercancel", stop);
+    };
+    li.addEventListener("pointerdown", (e) => {
+      active = true; startY = e.clientY; acc = 0;
+      li.classList.add("dragging");
+      haptic(18);
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", stop);
+      document.addEventListener("pointercancel", stop);
     });
-    const stop = () => { active = false; li.classList.remove("dragging"); };
-    li.addEventListener("pointerup", stop);
-    li.addEventListener("pointercancel", stop);
     return li;
   }
 
