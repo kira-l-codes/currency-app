@@ -7,7 +7,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "web 1.9";
+  const VERSION = "web 2.0";
 
   /* ── catalogue ───────────────────────────────────────────────────────────── */
   const CAT = {
@@ -130,7 +130,10 @@
   /* ── metals: accept a publication, decide a direction, never replay one ──── */
   const M = window.Motion;
 
-  const quoteOf = (json) => ({ ounceUsd: json.price, atMs: M.parseProviderAt(json.updatedAt) || 0 });
+  const quoteOf = (json) => {
+    const at = M.parseProviderAt(json.updatedAt);
+    return { ounceUsd: json.price, atMs: at || 0, atKnown: Boolean(at) };
+  };
 
   /**
    * Folds a fresh read into the state. A publication the page has not seen is accepted, given a
@@ -148,6 +151,7 @@
       state.metalMeta[code] = {
         ounceUsd: quote.ounceUsd,
         atMs: stamp,
+        atKnown: quote.atKnown !== false && quote.atMs > 0,
         receivedAt,
         tick: M.tick(previous ? previous.ounceUsd : null, quote.ounceUsd),
         seq: (previous ? previous.seq : 0) + 1,
@@ -160,11 +164,14 @@
     return changed;
   }
 
-  /** LIVE / DELAYED / OFFLINE for the metal feed, from the age of the newest accepted publication. */
-  function metalsFeedState() {
-    const stamps = Object.values(state.metalMeta).map((m) => m.receivedAt);
-    const newest = stamps.length ? Math.max(...stamps) : 0;
-    return M.feedState(stamps.length > 0, M.ageMs(Date.now(), newest));
+  /**
+   * One metal's own state, from that metal's own publication time. null = age unknown: no price, no
+   * record of when it was published, or a time the feed never gave (a receipt is not a publication).
+   */
+  function metalFeedFor(code) {
+    const meta = state.metalMeta[code];
+    const hasPrice = state.metals[code] > 0;
+    return M.metalState(hasPrice, Boolean(meta && meta.atKnown), meta ? meta.atMs : 0, Date.now());
   }
 
   const METALS_LABEL = { live: "live", delayed: "delayed", offline: "offline" };
@@ -294,7 +301,10 @@
 
   function openKeypad(opts) {
     kpMode = opts.mode || "amount";
-    setKeypadMode(kpMode === "quantity");
+    setKeypadMode(kpMode !== "amount");
+    const kp = $("keypad");
+    kp.classList.toggle("kp-notes", kpMode === "quantity");
+    kp.classList.toggle("kp-plain", kpMode === "decimal");
     kpCommit = opts.onCommit;
     $("kpFlag").textContent = flagOf(opts.code) || "¤";
     $("kpName").textContent = opts.title || nameOf(opts.code);
@@ -314,7 +324,14 @@
   // Convert appends to the number, Count replaces it on the first digit — Android does both, and
   // the difference is a parameter rather than two copies of the same rules.
   let replaceOnFirstDigit = false;
+  const SIMPLE_MAX = 12;   // Android's count keypad takes 12 characters
   function press(key) {
+    if (kpMode !== "amount") {
+      // The count keypad has digits only, a point where the figure is money, and no operators.
+      const ok = /^[0-9]$/.test(key) || key === "back" || (key === "." && kpMode === "decimal");
+      if (!ok) return;
+      if (key !== "back" && !fresh && entry.length >= SIMPLE_MAX) return;
+    }
     const out = L.pressKey(entry, key, { fresh, replace: replaceOnFirstDigit });
     entry = out.entry;
     fresh = out.fresh;
@@ -379,12 +396,8 @@
       : "—";
     // What matters is how old the numbers are, not which browser event fired last.
     $("convertSub").textContent = (fresh ? "Updated " : "Cached ") + when + " · " + state.order.length + " currencies · " + VERSION;
-    const metalFeed = metalsFeedState();
-    const metalText = metalFeed === "live"
-      ? "gold & silver live"
-      : metalFeed === "delayed"
-        ? "gold & silver delayed"
-        : "gold & silver offline";
+    const word = (f) => (f === null ? "age unknown" : f);
+    const metalText = "gold " + word(metalFeedFor("XAU")) + " · silver " + word(metalFeedFor("XAG"));
     $("convertSource").textContent = navigator.onLine === false
       ? "Offline · rates from " + new Date(state.updated).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) + " · " + metalText
       : "Rates by open.er-api.com · " + metalText + " (30 s)";
@@ -533,8 +546,7 @@
 
     li.addEventListener("click", () => {
       if (code === state.base) { openAmountSheet(); return; }
-      // The currency that was the base has to stay watchable, or picking gold hides the dollars.
-      if (!state.order.includes(state.base) && state.base !== code) state.order.unshift(state.base);
+      // Android keeps a fixed target list: a base change never adds the old base as a row.
       state.base = code;
       saveState();
       renderAll();
@@ -711,7 +723,7 @@
     perUsd, convert, toUsd, evaluate, toast, saveState, setScreen,
     sheetOpen, sheetClose, openKeypad, openPicker, renderAll, renderList, loadRates,
     // Exposed for the ticker's own use and for the browser checks that drive a price move.
-    applyMetals, paintMetalRow, metalsFeedState,
+    applyMetals, paintMetalRow, metalFeedFor,
   };
 
   loadState();
@@ -1026,8 +1038,8 @@
     remove.textContent = "Remove";
     remove.addEventListener("click", () => {
       if (c().bag.length === 1) { A.toast("Keep at least one currency in the bag"); return; }
+      // Hiding keeps the quantities, as on Android: adding the currency back shows them again.
       c().bag = c().bag.filter((x) => x !== code);
-      delete c().counts[code];
       A.saveState();
       render();
     });
@@ -1153,7 +1165,7 @@
     }));
     label.onclick = () => A.openKeypad({
       code: "USD", title: "Expected in the bag", subtitle: "compared with the count",
-      initial: c().expected || 0, mode: "quantity", confirm: "Set",
+      initial: c().expected || 0, mode: "decimal", confirm: "Set",
       onCommit: (v) => { c().expected = v > 0 ? v : null; A.saveState(); render(); },
     });
 
