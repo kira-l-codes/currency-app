@@ -1,154 +1,115 @@
 # Currency
 
-A native Android app for the money in your pocket: convert currencies, read the charts, and count
-cash by banknote — including gold and silver by the ounce, gram and karat.
+Convert currencies, read rate charts, and count cash by banknote. Gold and silver are priced by the
+ounce, gram and karat. It comes as a native Android app and as a web app that installs to the home
+screen. Both are free, need no API keys and no account.
 
-Kotlin + Jetpack Compose, dark-first, no web view, no API keys, no account.
+- Web app: https://kira-l-codes.github.io/currency-app/
+- Source: https://github.com/kira-l-codes/currency-app
+- Everything here lives on one branch: `main`.
 
-There is also a **web build** of the same three screens, installable as an app:
+## Features
 
-**https://lamahuissn-web.github.io/currency-app/** — no build step, no server, works offline.
+- **Convert.** One base amount against a watch list of fiat currencies, crypto and metals. Swipe a
+  row right to pin it, left to delete it. Reorder by dragging. Pull down to refresh. Tap a row to set
+  the base; tap the base to open the keypad.
+- **Keypad arithmetic.** `1500×3`, `200+350`. `×` and `÷` bind before `+` and `−`. A half-typed or
+  divide-by-zero entry is never converted.
+- **Add Currency.** Search by name, code, country or region. Fiat, Crypto and Metal tabs.
+- **Metals.** Tapping gold or silver opens a sheet with the ounce price, a LIVE / DELAYED / OFFLINE
+  badge, the gram price at 24 / 22 / 21 / 18 karat, and the 21k gold pound (7.32 g). Silver shows the
+  ounce and the gram. It never changes the base currency.
+- **Chart.** Daily line for a pair, 1D to 2Y. A pair with no published history says so.
+- **Count.** Count cash by banknote with `− n +` steppers per denomination (real ladders for 20
+  currencies), a subtotal in its own currency and in USD, and an expected amount that answers
+  `Match`, `Short` or `Over`. Counts persist, Save writes a history entry, and each currency can have
+  a manual street rate.
+- **Honest data.** Stale or offline rates are labelled, never shown as live. A value that cannot be
+  known is shown as unknown, not guessed.
 
-## What it does
+## Web and Android
 
-**Convert** — one base amount against a watch list of 166 fiat codes and 16 coins. Swipe a row right
-to pin it, left to delete it; drag to reorder; pull down to refresh. Tapping a row opens the amount
-pad for that currency.
+The two builds are meant to behave the same. Android is the reference; where Android is wrong the
+mistake is fixed there too rather than copied. `docs/CONTRACT.md` lists every rule, how each build
+stands, and which test checks it.
 
-**Chart** — a hand-drawn daily line for a pair, from 1D to 2Y, with the period and the pair one tap
-away. A pair the ECB does not publish says so instead of drawing a guess.
+Known differences: Android lists 16 crypto coins, the web has BTC and ETH only (see
+`docs/DECISIONS.md`). Web storage is `localStorage`, Android uses SharedPreferences, and there is no
+sync between them. Touch behaviour (swipe, pull-to-refresh, vibration, sound, splash) is written from
+the Android code and checked in tests, but has not been verified on a real phone for the web.
 
-**Count** — a cash counter for a bag of currencies: each currency has its real banknote ladder, its
-own `− n +` steppers, and a subtotal both in its own money and in USD. Set an **expected** amount and
-the card answers `✓ Match`, `Short $49.00` or `Over $12.00` as you count. Counts persist, **Save**
-writes a line into a history that restores the exact notes, and each currency can carry a **manual
-rate** (the street rate, not the published one) with the sheet saying plainly when rates are cached.
+## Data sources (all keyless)
 
-**Live gold and silver** — the two metal rows flash green or red for under a second when the feed
-publishes a new price, with a small ▲ / ▼ in the gap before the pill. Nothing else on the row moves:
-the indicator lives in space that was already empty. `gold-api.com` publishes once every 30 seconds,
-so the app polls every 30 seconds and the feed's own `updatedAt` decides what counts as new — a poll
-that lands inside the same publication changes nothing and animates nothing. The sheet labels the
-feed **LIVE** under 75 s, **DELAYED** under 15 minutes, **OFFLINE** past that; a stale number is never
-called live. The rules live in `data/PriceMotion.kt` and `web/motion.js` with the same thresholds and
-the same tests, and both clients stop polling when they are not on screen.
-
-**Gold and silver** — spot prices by the troy ounce from a keyless feed. A metal row shows its price,
-not a converted fraction; tapping it opens the ounce, the gram at 24 / 22 / 21 / 18 karat, and the
-7.32 g 21k gold pound. Metals refresh every 15 seconds while the app is on screen, and stop the moment
-it is in your pocket.
-
-**Arithmetic in the amount field** — `1500×3`, `200+350`, with `×` and `÷` binding before `+` and `−`,
-a running total while you type, and a refusal to convert a half-typed or divide-by-zero entry.
-
-## Data sources — all keyless
-
-| What | Where |
+| What | Source |
 | --- | --- |
-| Fiat rates (166 codes) | `open.er-api.com/v6/latest/USD` |
-| Historical series | `api.frankfurter.dev` (ECB reference rates, ~30 pairs) |
-| Crypto spot + history | `api.coingecko.com` |
-| Gold and silver spot | `api.gold-api.com/price/XAU` · `/XAG` |
+| Fiat rates | `open.er-api.com/v6/latest/USD` |
+| History | `api.frankfurter.dev` (ECB reference rates) |
+| Crypto | `api.coingecko.com` |
+| Gold and silver | `api.gold-api.com/price/XAU`, `/XAG` |
 
-Every rate is stored in one shape — **units of that currency per 1 USD** — and every figure in the app
-is derived from it. When a value cannot be known the app says so rather than inventing one: an
-unpublished chart pair, a currency with no rate, a metals feed that did not answer, rates older than
-the last successful refresh. A stack of foreign cash is priced by **dividing** by that table, which is
-what the `50,000 LBP` regression test exists to protect.
+Every rate is stored as units of that currency per 1 USD. These are reference rates and can differ
+from street or exchanger rates.
 
-## Build locally
+## Run and test
+
+Web (no build step, no server):
+
+```bash
+cd web
+npm ci
+node --test tests/*.test.mjs        # all web tests
+npx serve .                          # or any static server, then open it
+```
+
+Android:
 
 ```bash
 export ANDROID_HOME=/path/to/android-sdk
 export JAVA_HOME=/path/to/jdk-21
-export CURRENCY_KEYSTORE_PROPERTIES=~/.currency/keystore.properties   # not in the repo
-./gradlew :app:testDebugUnitTest :app:assembleRelease
+./gradlew :app:testDebugUnitTest     # JVM tests
 ```
 
-`keystore.properties` lives **outside** the working tree and holds:
+A release APK needs a signing keystore kept outside the repo
+(`CURRENCY_KEYSTORE_PROPERTIES=~/.currency/keystore.properties`). The release build fails if it is
+missing, so an unsigned APK cannot ship by accident. The keystore is never committed.
 
-```properties
-storeFile=/absolute/path/to/release.jks
-storePassword=…
-keyAlias=…
-keyPassword=…
-```
+## CI and deploy
 
-A release build fails loudly when that file is missing, so an unsigned APK can never be delivered by
-accident. The keystore is never committed: the signature is the only thing that lets an update install
-over an existing copy of the app.
+- `validate.yml` runs on every push and pull request: web tests (Node 22) and JVM tests. Nothing in it
+  deploys or releases.
+- `pages.yml` runs on pushes to `main` that touch `web/`: it re-runs the web tests, then publishes
+  `web/` to GitHub Pages. If tests fail, nothing deploys.
+- `release-apk.yml` builds and signs the APK from the Actions tab or by pushing a tag such as `v1.9.4`.
+  It needs these repository secrets: `ANDROID_KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`,
+  `KEY_PASSWORD`.
 
-## Build on GitHub Actions
+## Branch and commit rules
 
-`.github/workflows/release-apk.yml` runs the tests, builds, verifies the signature and uploads the
-APK — from the **Actions** tab, or by pushing a tag:
-
-```bash
-git tag v1.7.1 && git push origin v1.7.1
-```
-
-| Secret | Meaning |
-| --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 release.jks` |
-| `KEYSTORE_PASSWORD` | keystore password |
-| `KEY_ALIAS` | key alias inside the keystore |
-| `KEY_PASSWORD` | key password |
-
-The artifact is `currency-release-apk`; for a tag it is attached to the release. Release builds are
-deliberately **not** run on the development host — resource shrinking needs more memory than it has.
-
-## The web build
-
-`web/` is the same three screens as plain HTML, CSS and one JavaScript file — no framework, no
-bundler, no server. `.github/workflows/pages.yml` publishes it to GitHub Pages on every push that
-touches it.
-
-| File | Role |
-| --- | --- |
-| `index.html` | the shell: three views, keypad, pickers, history |
-| `app.css` | one stylesheet, the app's palette |
-| `app.js` | rate table, conversion direction, expression parser, all three views |
-| `manifest.webmanifest` + icons | makes it installable to the home screen |
-| `motion.js` | the price-motion rules, shared with the Node tests |
-| `sw.js` | caches the shell only — never a price |
-
-Two rules are worth knowing before editing it:
-
-1. **Money goes through one function.** `convert(value, from, to)` divides into USD and multiplies
-   out of it, because the table is units per 1 USD. A second implementation drifted once and turned
-   50,000 LBP into four billion dollars.
-2. **Prices are never cached as if they were live.** The service worker deliberately ignores the rate
-   feeds: a cached HTTP response is indistinguishable from a fresh one, so the app keeps the last
-   known rates in `localStorage` and labels them `Cached 20:41` plus `Offline — rates from 7 Nov`.
-   The feeds are fetched with `cache: "no-store"` so a `200` always means the network answered.
-
-Offline works because the shell is cached; the numbers you saw last are drawn from storage, marked
-as stale, and replaced the moment the network returns.
-
-## Tests
-
-`./gradlew :app:testDebugUnitTest` — 100 JVM tests: money formatting, list rules, gesture
-disambiguation, the count arithmetic (mixed bags, karats, expected-vs-counted, the 50,000 LBP case),
-storage round-trips, parsers pinned to bodies captured live from each endpoint, and the price-motion
-rules (direction, the half-cent epsilon that ignores float noise, duplicate publications, out-of-order
-replies, the LIVE/DELAYED/OFFLINE bands, and the provider timestamp parser).
-
-`node --test web/tests/motion.test.mjs` — 19 tests over the exact `web/motion.js` the browser loads,
-run in CI before the Pages deploy.
+- One branch, `main`. Finished work is merged into it and the extra branch is deleted.
+- Merging to `main` deploys the web app.
+- Commit messages say what changed and why, for example `Metals sheet: match Android`, not
+  `Update app.js`. Group related files into one commit.
 
 ## Layout
 
 ```
-app/src/main/java/com/lamahuissn/currency/
-├── data/            catalogue, rate + metal clients, parsers, prefs, count maths, formatting, rules
-├── ui/              Convert, Chart, Count, Add Currency, keypad, sheets, theme, components
-└── MainActivity.kt  tab state, sheets, splash
-app/src/test/        JVM tests
-app/src/test/resources/fixtures/   live captures from the endpoints
-design/              the HTML design demos the screens were built from
-web/                 the installable web build (GitHub Pages)
+app/        Android app (Kotlin, Jetpack Compose) and JVM tests
+web/        web app: index.html, app.js, screens.js, logic.js, motion.js, sw.js, tests/
+docs/       CONTRACT.md, DECISIONS.md, STORAGE-RESTORE-DESIGN.md, CHANGELOG at repo root
+design/     HTML design demos and comparison screenshots
+.github/    CI and release workflows
 ```
+
+Web notes: money goes through one `convert(value, from, to)` function (divide into USD, multiply
+out). The service worker caches only the app shell, never prices.
+
+## Docs
+
+- `CHANGELOG.md` what changed and when
+- `docs/CONTRACT.md` the behaviour both builds must share, with checks
+- `docs/DECISIONS.md` why things are the way they are, and what is parked or held
+- `docs/STORAGE-RESTORE-DESIGN.md` parked design, not implemented
 
 ## License
 
-No license file yet: the code is public to read, not yet licensed for reuse.
+No license file yet. The code is public to read, not licensed for reuse.
