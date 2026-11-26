@@ -7,7 +7,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "web 2.2";
+  const VERSION = "web 2.3";
 
   /* ── catalogue ───────────────────────────────────────────────────────────── */
   const CAT = {
