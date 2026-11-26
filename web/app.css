@@ -439,3 +439,13 @@ body{
 .sp-hair{width:120px;height:1px;background:#222}
 .sp-hair b{display:block;height:100%;background:var(--green);animation:spFill .8s linear both}
 @keyframes spFill{from{width:0}to{width:100%}}
+
+/* ── polish from the live run ─────────────────────────────── */
+.keypad.kp-notes .kp-key:not(.pill),.keypad.kp-plain .kp-key:not(.pill){width:min(100%,14dvh);justify-self:center}
+.sheet-head .metal-close,.sheet-head .kp-close.metal-close{width:auto;height:auto;border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:700}
+.scrubber{right:calc(50% - 230px + 2px)}
+@media (max-width:460px){.scrubber{right:2px}}
+.overlay-screen{scrollbar-width:none}
+.overlay-screen::-webkit-scrollbar{display:none}
+.overlay-screen .head{margin-bottom:6px}
+.search-pill input::-webkit-search-cancel-button{display:none}
