@@ -223,3 +223,15 @@ test("the splash shows once per launch", () => {
     assert.equal(w.document.getElementById("splash"), null, "second call in the same launch does nothing");
   } finally { close(w); }
 });
+
+test("dragging a reorder row across several rows keeps moving it", () => {
+  const w = boot(rec());
+  try {
+    w.App.setReorder(true);
+    const row = w.document.querySelector('#list .row[data-code="LBP"]');
+    ptr(w, row, "pointerdown", 0, 100);
+    [130, 170, 230, 300].forEach((y) => w.document.dispatchEvent(new w.MouseEvent("pointermove", { clientY: y })));
+    w.document.dispatchEvent(new w.MouseEvent("pointerup"));
+    assert.deepEqual([...w.App.state.order], ["EUR", "AED", "XAU", "LBP"], "three rows crossed in one drag");
+  } finally { close(w); }
+});
