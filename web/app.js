@@ -7,7 +7,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "web 2.0";
+  const VERSION = "web 2.1";
 
   /* ── catalogue ───────────────────────────────────────────────────────────── */
   const CAT = {
@@ -32,6 +32,40 @@
     HUF:["Hungarian Forint","Ft"],      RON:["Romanian Leu","lei"],     SEK:["Swedish Krona","kr"],
     NOK:["Norwegian Krone","kr"],       DKK:["Danish Krone","kr"],      CHF:["Swiss Franc","CHF"],
     ISK:["Icelandic Krona","kr"],       BTC:["Bitcoin","₿"],            ETH:["Ethereum","Ξ"],
+    /* The rest of Android's fiat catalogue (same names and symbols). */
+    AFN:["Afghan Afghani","؋"], ALL:["Albanian Lek","L"], AOA:["Angolan Kwanza","Kz"],
+    AMD:["Armenian Dram","֏"], AWG:["Aruban Florin","ƒ"], AZN:["Azerbaijani Manat","₼"],
+    BSD:["Bahamian Dollar","B$"], BBD:["Barbadian Dollar","Bds$"], BYN:["Belarusian Ruble","Br"],
+    BZD:["Belize Dollar","BZ$"], BMD:["Bermudian Dollar","BD$"], BTN:["Bhutanese Ngultrum","Nu."],
+    BOB:["Bolivian Boliviano","Bs"], BAM:["Bosnia-Herzegovina Mark","KM"], BWP:["Botswana Pula","P"],
+    BND:["Brunei Dollar","$"], BIF:["Burundian Franc","FBu"], KHR:["Cambodian Riel","៛"],
+    CVE:["Cape Verdean Escudo","$"], XCG:["Caribbean Guilder","Cg"], KYD:["Cayman Islands Dollar","CI$"],
+    XAF:["Central African CFA Franc","FCFA"], XPF:["CFP Franc","₣"], KMF:["Comorian Franc","Fr"],
+    CDF:["Congolese Franc","FC"], CKD:["Cook Islands Dollar","$"], CRC:["Costa Rican Colón","₡"],
+    CUP:["Cuban Peso","$"], GMD:["Dalasi","D"], DJF:["Djiboutian Franc","Fdj"],
+    DOP:["Dominican Peso","RD$"], XCD:["East Caribbean Dollar","EC$"], ERN:["Eritrean Nakfa","Nfk"],
+    ETB:["Ethiopian Birr","Br"], FKP:["Falkland Islands Pound","£"], FOK:["Faroese Króna","kr"],
+    FJD:["Fijian Dollar","FJ$"], GEL:["Georgian Lari","₾"], GIP:["Gibraltar Pound","£"],
+    GTQ:["Guatemalan Quetzal","Q"], GGP:["Guernsey Pound","£"], GNF:["Guinean Franc","FG"],
+    GYD:["Guyanese Dollar","G$"], HTG:["Haitian Gourde","G"], HNL:["Honduran Lempira","L"],
+    JMD:["Jamaican Dollar","J$"], JEP:["Jersey Pound","£"], KZT:["Kazakhstani Tenge","₸"],
+    KID:["Kiribati Dollar","$"], KGS:["Kyrgyzstani Som","с"], LAK:["Lao Kip","₭"],
+    LSL:["Lesotho Loti","L"], LRD:["Liberian Dollar","L$"], MOP:["Macanese Pataca","P"],
+    MKD:["Macedonian Denar","ден"], MGA:["Malagasy Ariary","Ar"], MWK:["Malawian Kwacha","MK"],
+    MVR:["Maldivian Rufiyaa","Rf"], IMP:["Manx Pound","£"], MRU:["Mauritanian Ouguiya","UM"],
+    MUR:["Mauritian Rupee","₨"], MDL:["Moldovan Leu","L"], MNT:["Mongolian Tögrög","₮"],
+    MZN:["Mozambican Metical","MT"], MMK:["Myanmar Kyat","K"], NAD:["Namibian Dollar","N$"],
+    NPR:["Nepalese Rupee","रू"], TWD:["New Taiwan Dollar","NT$"], NIO:["Nicaraguan Córdoba","C$"],
+    KPW:["North Korean Won","₩"], PAB:["Panamanian Balboa","B/."], PGK:["Papua New Guinean Kina","K"],
+    PYG:["Paraguayan Guaraní","₲"], RWF:["Rwandan Franc","FRw"], SHP:["Saint Helena Pound","£"],
+    WST:["Samoan Tālā","T"], RSD:["Serbian Dinar","дин"], SCR:["Seychellois Rupee","₨"],
+    SLE:["Sierra Leonean Leone","Le"], SBD:["Solomon Islands Dollar","$"], SOS:["Somali Shilling","Sh"],
+    SSP:["South Sudanese Pound","£"], SRD:["Surinamese Dollar","Sr$"], SZL:["Swazi Lilangeni","L"],
+    STN:["São Tomé and Príncipe Dobra","Db"], TJS:["Tajikistani Somoni","ЅМ"], TZS:["Tanzanian Shilling","TSh"],
+    TOP:["Tongan Paʻanga","T$"], TTD:["Trinidad and Tobago Dollar","TT$"], TMT:["Turkmenistan Manat","m"],
+    TVD:["Tuvaluan Dollar","$"], UGX:["Ugandan Shilling","USh"], UYU:["Uruguayan Peso","$U"],
+    UZS:["Uzbekistani Som","soʻm"], VUV:["Vanuatu Vatu","Vt"], VES:["Venezuelan Bolívar","Bs.S"],
+    XOF:["West African CFA Franc","CFA"], ZMW:["Zambian Kwacha","ZK"], ZWG:["Zimbabwe Gold","ZiG"],
     XAU:["Gold",null],                  XAG:["Silver",null],
   };
 
@@ -41,19 +75,44 @@
     LKR:"LK", CNY:"CN", JPY:"JP", KRW:"KR", HKD:"HK", SGD:"SG", MYR:"MY", THB:"TH", IDR:"ID",
     PHP:"PH", VND:"VN", AUD:"AU", NZD:"NZ", CAD:"CA", BRL:"BR", MXN:"MX", ARS:"AR", CLP:"CL",
     COP:"CO", PEN:"PE", ZAR:"ZA", NGN:"NG", KES:"KE", GHS:"GH", RUB:"RU", UAH:"UA", PLN:"PL",
-    CZK:"CZ", HUF:"HU", RON:"RO", SEK:"SE", NOK:"NO", DKK:"DK", CHF:"CH", ISK:"IS" };
+    CZK:"CZ", HUF:"HU", RON:"RO", SEK:"SE", NOK:"NO", DKK:"DK", CHF:"CH", ISK:"IS",
+    AFN:"AF", ALL:"AL", AOA:"AO", AMD:"AM", AWG:"AW", AZN:"AZ", BSD:"BS", BBD:"BB",
+    BYN:"BY", BZD:"BZ", BMD:"BM", BTN:"BT", BOB:"BO", BAM:"BA", BWP:"BW", BND:"BN",
+    BIF:"BI", KHR:"KH", CVE:"CV", XCG:"CW", KYD:"KY", XAF:"CM", XPF:"PF", KMF:"KM",
+    CDF:"CD", CKD:"CK", CRC:"CR", CUP:"CU", GMD:"GM", DJF:"DJ", DOP:"DO", XCD:"AG",
+    ERN:"ER", ETB:"ET", FKP:"FK", FOK:"FO", FJD:"FJ", GEL:"GE", GIP:"GI", GTQ:"GT",
+    GGP:"GG", GNF:"GN", GYD:"GY", HTG:"HT", HNL:"HN", JMD:"JM", JEP:"JE", KZT:"KZ",
+    KID:"KI", KGS:"KG", LAK:"LA", LSL:"LS", LRD:"LR", MOP:"MO", MKD:"MK", MGA:"MG",
+    MWK:"MW", MVR:"MV", IMP:"IM", MRU:"MR", MUR:"MU", MDL:"MD", MNT:"MN", MZN:"MZ",
+    MMK:"MM", NAD:"NA", NPR:"NP", TWD:"TW", NIO:"NI", KPW:"KP", PAB:"PA", PGK:"PG",
+    PYG:"PY", RWF:"RW", SHP:"SH", WST:"WS", RSD:"RS", SCR:"SC", SLE:"SL", SBD:"SB",
+    SOS:"SO", SSP:"SS", SRD:"SR", SZL:"SZ", STN:"ST", TJS:"TJ", TZS:"TZ", TOP:"TO",
+    TTD:"TT", TMT:"TM", TVD:"TV", UGX:"UG", UYU:"UY", UZS:"UZ", VUV:"VU", VES:"VE",
+    XOF:"SN", ZMW:"ZM", ZWG:"ZW"
+  };
 
   /* Notes only — the app never counts coins. */
-  const DENOMS = {
+  const DENOMS = {   // the ladders Android ships (Banknotes.kt), in the same order
     USD:[100,50,20,10,5,1],
-    LBP:[100000,50000,20000,10000,5000,1000],
-    EUR:[500,200,100,50,20,10,5],
+    EUR:[200,100,50,20,10,5],
     GBP:[50,20,10,5],
-    SYP:[5000,2000,1000,500,200,100],
+    LBP:[100000,50000,20000,10000,5000,1000],
     TRY:[200,100,50,20,10,5],
     EGP:[200,100,50,20,10,5],
-    AED:[1000,500,200,100,50,5],
-    SAR:[500,100,50,10,5],
+    AED:[500,200,100,50,20,10,5],
+    SAR:[500,200,100,50,20,10,5],
+    QAR:[500,200,100,50,10,5],
+    SYP:[5000,2000,1000,500,200,100],
+    JOD:[50,20,10,5,1],
+    IQD:[25000,10000,5000,1000,500,250],
+    CAD:[100,50,20,10,5],
+    AUD:[100,50,20,10,5],
+    CHF:[1000,200,100,50,20,10],
+    INR:[2000,500,200,100,50,10],
+    RUB:[5000,2000,1000,500,100,50],
+    MAD:[200,100,50,20],
+    DZD:[2000,1000,500,200,100],
+    YER:[1000,500,250,100,50],
   };
 
   const FALLBACK = { USD:1, EUR:0.8905, GBP:0.742, LBP:89550.64, SYP:13002, EGP:53.899,
@@ -69,15 +128,17 @@
 
   const CRYPTO_IDS = { BTC: "bitcoin", ETH: "ethereum" };
 
-  const DEFAULT_ORDER = ["LBP","EGP","TRY","EUR","INR","GBP","SYP","AED","SAR","XAU","XAG","BTC","JPY","CNY","CHF","CAD","AUD"];
+  // Android's default list (Prefs.DEFAULT_TARGETS), then gold and silver, which Android seeds once.
+  const ANDROID_TARGETS = ["LBP","EGP","TRY","EUR","INR","GBP","DKK","BTC","SYP","NGN","SAR"];
+  const DEFAULT_ORDER = [...ANDROID_TARGETS, "XAU", "XAG"];
   const STORE = "currency.web.v2";
 
   const state = {
     base:"USD", amount:100,
     rates:{ ...FALLBACK }, metals:{}, metalMeta:{}, updated:0, live:false,
-    order:[...DEFAULT_ORDER], pinned:["LBP"], screen:"convert",
+    order:[...DEFAULT_ORDER], pinned:[], screen:"convert",
     chart:{ base:"EUR", quote:"USD", period:"3M" },
-    count:{ bag:["USD"], counts:{}, expected:null, history:[], collapsed:[] },
+    count:{ bag:["USD","LBP"], counts:{}, expected:null, history:[], collapsed:[] },
   };
 
   /* ── helpers ─────────────────────────────────────────────────────────────── */
@@ -242,7 +303,7 @@
       if (s.chart) state.chart = { ...state.chart, ...s.chart };
       if (s.count) {
         state.count = {
-          bag: Array.isArray(s.count.bag) && s.count.bag.length ? s.count.bag : ["USD"],
+          bag: Array.isArray(s.count.bag) && s.count.bag.length ? s.count.bag : ["USD","LBP"],
           counts: s.count.counts || {}, expected: s.count.expected ?? null,
           history: Array.isArray(s.count.history) ? s.count.history : [],
           collapsed: Array.isArray(s.count.collapsed) ? s.count.collapsed : [],
@@ -604,8 +665,15 @@
       saveState(); renderList();
       toast("Gold and silver added");
     });
-    item("Reset the list", state.order.length + " rows", () => {
-      state.order = [...DEFAULT_ORDER]; state.pinned = ["LBP"]; saveState(); renderList(); toast("List reset");
+    item("Sort A → Z", "by code", () => {
+      state.order = [...state.order].sort(); saveState(); renderList(); toast("Sorted A → Z");
+    });
+    item("Sort by value", "biggest first", () => {
+      const val = (c) => { const v = convert(state.amount, state.base, c); return Number.isFinite(v) ? v : 0; };
+      state.order = [...state.order].sort((a, b) => val(b) - val(a)); saveState(); renderList(); toast("Sorted by value");
+    });
+    item("Restore default list", state.order.length + " rows", () => {
+      state.order = [...ANDROID_TARGETS]; saveState(); renderList(); toast("List restored");
     });
     item("Install on this phone", "works offline", () => {
       if (installEvent) installEvent.prompt();
