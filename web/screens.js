@@ -34,7 +34,7 @@
     const tabs = el("div", "seg");
     const body = el("div", "add-body"); body.id = "addBody";
     const search = el("div", "search-pill");
-    const input = el("input"); input.id = "addSearch"; input.type = "search"; input.autocomplete = "off";
+    const input = el("input"); input.id = "addSearch"; input.type = "text"; input.autocomplete = "off";
     input.placeholder = "Currency, Country, Region, or Code";
     const clear = el("button", "clear-x", "✕"); clear.type = "button"; clear.hidden = true;
     search.append(input, clear);
@@ -167,7 +167,7 @@
       sheet.appendChild(el("div", "grab"));
       const head = el("div", "sheet-head");
       head.appendChild(el("span", "sheet-title", (code === "XAU" ? "GOLD" : "SILVER") + " · SPOT"));
-      const c = el("button", "kp-close small", "Close"); c.type = "button"; c.addEventListener("click", close);
+      const c = el("button", "kp-close small metal-close", "Close"); c.type = "button"; c.addEventListener("click", close);
       head.appendChild(c); sheet.appendChild(head);
       const meta = A.state.metalMeta[code];
       const ounce = meta && meta.ounceUsd > 0 ? meta.ounceUsd : (A.state.metals[code] > 0 ? 1 / A.state.metals[code] : 0);
