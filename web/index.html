@@ -24,16 +24,18 @@
       <div class="title">Currency</div>
       <div class="subtitle" id="convertSub">Updated — · — currencies</div>
     </div>
-    <div class="pill-group">
+    <button class="done-pill" id="doneReorder" type="button" hidden>✓ Done</button>
+    <div class="pill-group" id="headActions">
       <button class="icon-pill" id="addRow" type="button" aria-label="Add a currency">+</button>
       <span class="sep"></span>
       <button class="icon-pill" id="moreMenu" type="button" aria-label="More">···</button>
     </div>
   </header>
 
+  <div class="load-bar" id="loadBar"></div>
   <ul class="rows" id="list"></ul>
 
-  <div class="hint" id="convertHint">Tap a row to make it the base · long-press a row to pin it</div>
+  <div class="hint" id="convertHint">Swipe a row right to pin it, left to delete it. Pull down to refresh.</div>
   <button class="install-line" id="installBanner" type="button" hidden>Install on this phone — works offline</button>
   <div class="hint source" id="convertSource">Rates by open.er-api.com</div>
 </main>
@@ -219,5 +221,6 @@
 <script src="motion.js"></script>
 <script src="logic.js"></script>
 <script src="app.js"></script>
+<script src="screens.js"></script>
 </body>
 </html>
