@@ -47,6 +47,15 @@
     return "offline";
   }
 
+  /**
+   * One metal's state from its own publication time. null means the age is unknown: there is no
+   * price, or the feed never said when it published (a receipt time is not a publication).
+   */
+  function metalState(hasPrice, atKnown, publishedAtMs, nowMs) {
+    if (!hasPrice || !atKnown || !(publishedAtMs > 0)) return null;
+    return feedState(true, ageMs(nowMs, publishedAtMs));
+  }
+
   /** Strictly newer publication, usable price. `lastAcceptedAtMs` is 0 for "never accepted". */
   function accept(nextUsd, nextAtMs, lastAcceptedAtMs) {
     if (!Number.isFinite(nextUsd) || nextUsd <= 0) return false;
@@ -61,6 +70,6 @@
 
   return {
     PROVIDER_PERIOD_MS, LIVE_MAX_AGE_MS, DELAYED_MAX_AGE_MS, TICK_EPSILON_USD, FLASH_MS,
-    parseProviderAt, tick, feedState, accept, ageMs,
+    parseProviderAt, tick, feedState, metalState, accept, ageMs,
   };
 });
