@@ -151,3 +151,57 @@ test("Expected keeps a decimal point but has no operators; Convert keeps the ful
     assert.ok(!kp.classList.contains("kp-plain") && !kp.classList.contains("kp-notes"));
   } finally { close(w); }
 });
+
+// ── data that must not drift from the Android sources (read straight from the Kotlin files) ──
+const kotlin = (p) => fs.readFileSync(new URL(`../../app/src/main/java/com/lamahuissn/currency/data/${p}`, import.meta.url), "utf8");
+
+test("banknote ladders equal Android's Banknotes.kt, currency for currency", () => {
+  const src = kotlin("Banknotes.kt");
+  const android = {};
+  for (const m of src.matchAll(/"([A-Z]{3})" to listOf\(([^)]*)\)/g)) {
+    android[m[1]] = m[2].split(",").map((n) => Number(n.trim().replace(/L$/, "").replace(/_/g, "")));
+  }
+  assert.ok(Object.keys(android).length >= 20, "parsed the Android ladders");
+  const w = boot();
+  try {
+    const web = JSON.parse(JSON.stringify(w.App.DENOMS));
+    assert.deepEqual(web, android);
+  } finally { close(w); }
+});
+
+test("a fresh install lists, pins and counts what Android does", () => {
+  const prefs = kotlin("Prefs.kt");
+  const targets = prefs.match(/DEFAULT_TARGETS = listOf\(([^)]*)\)/)[1].match(/[A-Z]{3}/g);
+  const bank = kotlin("Banknotes.kt").match(/defaultBag: List<String> = listOf\(([^)]*)\)/)[1].match(/[A-Z]{3}/g);
+  const w = boot();
+  try {
+    assert.deepEqual([...w.App.state.order], [...targets, "XAU", "XAG"], "Android's targets, then the seeded metals");
+    assert.deepEqual([...w.App.state.pinned], [], "nothing is pinned on a fresh install");
+    assert.deepEqual([...w.App.state.count.bag], bank);
+  } finally { close(w); }
+});
+
+test("every fiat currency in Android's catalogue is in the web catalogue, with a flag", () => {
+  const src = kotlin("Currencies.kt");
+  const fiat = src.slice(src.indexOf("val fiat"), src.indexOf("val crypto"));
+  const codes = [...fiat.matchAll(/Currency\("([A-Z]{3})"/g)].map((m) => m[1]);
+  assert.ok(codes.length > 150);
+  const w = boot();
+  try {
+    const missing = codes.filter((c) => !w.App.CAT[c] || !w.App.flagOf(c));
+    assert.deepEqual(missing, []);
+  } finally { close(w); }
+});
+
+test("Sort A to Z and Restore default list in the menu behave like Android's", () => {
+  const w = boot({ v: 3, base: "USD", order: ["LBP", "EUR", "AED"], pinned: [] });
+  try {
+    click(w, "#moreMenu");
+    const item = (label) => [...w.document.querySelectorAll("#menuList .menu-item")].find((b) => b.textContent.startsWith(label));
+    item("Sort A").dispatchEvent(new w.MouseEvent("click", { bubbles: true }));
+    assert.deepEqual([...w.App.state.order], ["AED", "EUR", "LBP"]);
+    click(w, "#moreMenu");
+    item("Restore default list").dispatchEvent(new w.MouseEvent("click", { bubbles: true }));
+    assert.deepEqual([...w.App.state.order], ["LBP","EGP","TRY","EUR","INR","GBP","DKK","BTC","SYP","NGN","SAR"]);
+  } finally { close(w); }
+});
