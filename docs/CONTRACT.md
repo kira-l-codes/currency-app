@@ -87,9 +87,9 @@ version written afterwards is what makes every later load unambiguous. It is not
 
 | Rule | Android | Web | Check |
 | --- | --- | --- | --- |
-| one metal's sheet shows **that** metal's freshness, from **that** metal's publication time (`ConvertScreen` → `MetalsSheet(feed = state.metalFeed(...))`) | ✅ | ❌ the web still reports the newest of the two | `MetalFreshnessTest` |
-| a price that arrived without a provider timestamp reads "age unknown", never `LIVE` | ✅ | ❌ | `MetalFreshnessTest` |
-| a numeric cache with no publication record is "unknown", not fresh | ✅ | partial | `MetalFreshnessTest` |
+| one metal's sheet shows **that** metal's freshness, from **that** metal's publication time (`ConvertScreen` → `MetalsSheet(feed = state.metalFeed(...))`) | ✅ | ✅ `metalFeedFor(code)` | `MetalFreshnessTest`, `parity.dom.test.mjs` |
+| a price that arrived without a provider timestamp reads "age unknown", never `LIVE` | ✅ | ✅ | `MetalFreshnessTest`, `parity.dom.test.mjs` |
+| a numeric cache with no publication record is "unknown", not fresh | ✅ | ✅ | `MetalFreshnessTest`, `parity.dom.test.mjs` |
 | `LIVE` / `DELAYED` / `OFFLINE` for fiat and crypto is decided per source | ❌ one `updatedAt` | ❌ one `updated` | **open (item 10)** |
 | a new receipt is not a new publication | ✅ | ✅ | `motion.test.mjs` |
 | a fresh gold price does not make silver live | ✅ | ✅ | `motion.test.mjs` |
@@ -103,7 +103,9 @@ version written afterwards is what makes every later load unambiguous. It is not
 | `Expected` is money and keeps its cents | ✅ text | ✅ JSON number | `PrefsPrecisionTest` |
 | Restore is a full snapshot that replaces the bag | ❌ merges | ❌ replaces the bag only, no rates | **open (items 21, 22)** |
 | unsaved changes are a real comparison, not a decorative dot | ❌ | ❌ | **open (item 24)** |
-| hiding a currency keeps its quantities | ✅ | ❌ | **open (item 25)** |
+| hiding a currency keeps its quantities | ✅ | ✅ | `parity.dom.test.mjs` |
+| the quantity keypad is a small integer-only pad (12 characters); Expected adds a point; no operators or shortcuts | ✅ `CountKeypadSheet` | ✅ | `parity.dom.test.mjs` |
+| a base change never adds the old base as a row | ✅ `setBase` | ✅ | `parity.dom.test.mjs` |
 
 ## 8. Platform differences that are deliberate
 
@@ -120,11 +122,8 @@ version written afterwards is what makes every later load unambiguous. It is not
 2. **Denomination source** — one versioned data file bundled at build time, generated into each
    build. Structure and validation owned here; correctness of disputed denominations still needs a
    central-bank source and a date.
-3. **Count keypad** — a small integer-only sheet for quantities, decimals only for `Expected` and a
-   manual rate. Not built yet.
-4. **Row order after a base change** — Android keeps a fixed target list; the web currently adds the
-   old base as a row. The review recommends Android's behaviour, which means removing that web
-   addition.
+3. **Count keypad** — built on the web (quantities integer-only, `Expected` with a point).
+4. **Row order after a base change** — Android keeps a fixed target list; the web now does the same.
 
 ## 10. What this file cannot claim
 
