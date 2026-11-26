@@ -7,7 +7,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "web 2.1";
+  const VERSION = "web 2.2";
 
   /* ── catalogue ───────────────────────────────────────────────────────────── */
   const CAT = {
@@ -136,10 +136,32 @@
   const state = {
     base:"USD", amount:100,
     rates:{ ...FALLBACK }, metals:{}, metalMeta:{}, updated:0, live:false,
-    order:[...DEFAULT_ORDER], pinned:[], screen:"convert",
+    order:[...DEFAULT_ORDER], pinned:[], screen:"convert", soundOn:true, reorder:false, loading:false,
     chart:{ base:"EUR", quote:"USD", period:"3M" },
     count:{ bag:["USD","LBP"], counts:{}, expected:null, history:[], collapsed:[] },
   };
+
+  /* ── touch feedback: a short tick and a vibration, both off when the device or the user says so ── */
+  function haptic(ms) {
+    if (navigator.vibrate) { try { navigator.vibrate(ms); } catch (err) { /* not allowed */ } }
+  }
+  let audio = null;
+  function tick() {
+    if (!state.soundOn) return;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      audio = audio || new Ctx();
+      const osc = audio.createOscillator(), gain = audio.createGain();
+      osc.frequency.value = 1400;
+      gain.gain.value = 0.6 * 0.25;
+      osc.connect(gain); gain.connect(audio.destination);
+      osc.start(); osc.stop(audio.currentTime + 0.035);
+    } catch (err) { /* no audio here */ }
+  }
+  document.addEventListener("click", (e) => {
+    if (e.target.closest && e.target.closest("button, .row, .dock-tab, .picker-item, .seg-tab, .chip")) tick();
+  }, true);
 
   /* ── helpers ─────────────────────────────────────────────────────────────── */
   const $ = (id) => document.getElementById(id);
@@ -260,7 +282,7 @@
         base: state.base, amount: state.amount, order: state.order, pinned: state.pinned,
         screen: state.screen,        chart: state.chart, count: state.count,
         rates: state.rates, metals: state.metals, updated: state.updated,
-        metalMeta: state.metalMeta,
+        metalMeta: state.metalMeta, sound: state.soundOn,
       }));
       return true;
     } catch (e) { return false; }          // private mode: it still works, it just forgets
@@ -314,6 +336,7 @@
       // A stored publication time lets the first paint say DELAYED instead of pretending.
       if (s.metalMeta) state.metalMeta = s.metalMeta;
       if (s.updated) state.updated = s.updated;
+      if (typeof s.sound === "boolean") state.soundOn = s.sound;
     } catch (e) {
       // A parsed record whose shape throws is treated like an unreadable one: keep the bytes, stop
       // writing, say so. half-read data is not a recovery.
@@ -456,6 +479,7 @@
       ? new Date(state.updated).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
       : "—";
     // What matters is how old the numbers are, not which browser event fired last.
+    if (state.reorder) { $("convertSub").textContent = "Drag a row up or down to move it."; return; }
     $("convertSub").textContent = (fresh ? "Updated " : "Cached ") + when + " · " + state.order.length + " currencies · " + VERSION;
     const word = (f) => (f === null ? "age unknown" : f);
     const metalText = "gold " + word(metalFeedFor("XAU")) + " · silver " + word(metalFeedFor("XAG"));
@@ -472,8 +496,15 @@
     paintStatus();
   }
 
+  function setLoading(on) {
+    state.loading = on;
+    const bar = $("loadBar");
+    if (bar) bar.classList.toggle("on", on);
+  }
+
   async function loadRates() {
     if (navigator.onLine === false) offlineNotice();
+    setLoading(true);
     try {
       const cryptoIds = Object.values(CRYPTO_IDS).join(",");
       const [fiat, gold, silver, crypto] = await Promise.all([
@@ -504,6 +535,8 @@
       if (window.ChartView) window.ChartView.onRates();
     } catch (err) {
       offlineNotice();
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -519,10 +552,40 @@
   }
 
   /** Rows in the app's order: the base first, then pinned, then the watch list. */
-  function orderedCodes() {
-    const rest = state.order.filter((c) => c !== state.base);
-    rest.sort((a, b) => (state.pinned.includes(b) ? 1 : 0) - (state.pinned.includes(a) ? 1 : 0));
-    return [state.base, ...rest];
+  function visibleTargets() {
+    return [...new Set(state.order.filter((c) => c && c !== state.base))];
+  }
+  /** Android's orderRows: pinned rows first, in the order they were pinned, then the rest. */
+  function orderRows() {
+    const visible = visibleTargets();
+    const head = [...new Set(state.pinned.filter((c) => visible.includes(c)))];
+    return [...head, ...visible.filter((c) => !head.includes(c))];
+  }
+  function orderedCodes() { return [state.base, ...orderRows()]; }
+
+  /** Android's moveItem: take the row out, put it at the other row's original index. */
+  function moveRow(from, to) {
+    const list = [...state.order];
+    const fromIndex = list.indexOf(from), toIndex = list.indexOf(to);
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return false;
+    list.splice(fromIndex, 1);
+    list.splice(toIndex, 0, from);
+    state.order = list;
+    saveState();
+    return true;
+  }
+  function removeRow(code) {
+    state.order = state.order.filter((c) => c !== code);
+    saveState();
+    renderList();
+  }
+  function setReorder(on) {
+    state.reorder = Boolean(on);
+    $("headActions").hidden = state.reorder;
+    $("doneReorder").hidden = !state.reorder;
+    document.body.classList.toggle("reordering", state.reorder);
+    paintStatus();
+    renderList();
   }
 
   /** The flash is a 900 ms window after an accepted publication, never a state that lingers. */
@@ -606,22 +669,64 @@
     li.appendChild(wrap);
 
     li.addEventListener("click", () => {
+      if (li._swiped) { li._swiped = false; return; }
       if (code === state.base) { openAmountSheet(); return; }
+      // A metal opens its sheet (ounce, grams, freshness); it is not made the base, as on Android.
+      if ((code === "XAU" || code === "XAG") && window.Screens) { window.Screens.openMetals(code); return; }
       // Android keeps a fixed target list: a base change never adds the old base as a row.
       state.base = code;
       saveState();
       renderAll();
       toast("Base set to " + code);
     });
-    // Long press pins, the way a swipe right does in the app.
-    let hold;
-    li.addEventListener("pointerdown", () => {
-      hold = setTimeout(() => { hold = null; togglePin(code); }, 480);
-    });
-    ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => li.addEventListener(ev, () => {
-      if (hold) { clearTimeout(hold); hold = null; }
-    }));
+    if (code !== state.base) attachSwipe(li, code);
     return li;
+  }
+
+  /**
+   * Swipe a row right to pin it, left to delete it (Android's SwipeRow). Nothing is claimed until the
+   * finger has moved past the slop, and then the larger axis wins; a tie goes to scrolling.
+   */
+  const SWIPE_SLOP = 10, SWIPE_COMMIT = 90;
+  function attachSwipe(li, code) {
+    let x0 = 0, y0 = 0, axis = null, id = null;
+    const reset = () => {
+      li.style.removeProperty("--sx");
+      li.classList.remove("swiping");
+      delete li.dataset.swipe;
+      axis = null; id = null;
+    };
+    li.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      x0 = e.clientX; y0 = e.clientY; axis = "undecided"; id = e.pointerId;
+    });
+    li.addEventListener("pointermove", (e) => {
+      if (axis === null || e.pointerId !== id) return;
+      const dx = e.clientX - x0, dy = e.clientY - y0;
+      if (axis === "undecided") {
+        if (Math.abs(dx) <= SWIPE_SLOP && Math.abs(dy) <= SWIPE_SLOP) return;
+        axis = Math.abs(dx) > Math.abs(dy) ? "swipe" : "scroll";
+        if (axis === "swipe") { li.classList.add("swiping"); try { li.setPointerCapture(id); } catch (err) { /* synthetic events */ } }
+      }
+      if (axis !== "swipe") return;
+      li.style.setProperty("--sx", dx + "px");
+      li.dataset.swipe = dx > 0 ? "pin" : "del";
+      li.dataset.label = dx > 0 ? (state.pinned.includes(code) ? "Unpin" : "Pin") : "Delete";
+    });
+    const end = (e, cancelled) => {
+      if (axis === null) return;
+      const dx = e.clientX - x0;
+      const wasSwipe = axis === "swipe";
+      reset();
+      if (!wasSwipe || cancelled) return;
+      li._swiped = true;                       // the click that follows a swipe must not open the row
+      setTimeout(() => { li._swiped = false; }, 350);
+      if (Math.abs(dx) < SWIPE_COMMIT) return;
+      haptic(18);
+      if (dx > 0) togglePin(code); else { removeRow(code); toast(code + " removed"); }
+    };
+    li.addEventListener("pointerup", (e) => end(e, false));
+    li.addEventListener("pointercancel", (e) => end(e, true));
   }
 
   function togglePin(code) {
@@ -636,7 +741,58 @@
   function renderList() {
     const list = $("list");
     list.innerHTML = "";
-    orderedCodes().forEach((code) => list.appendChild(rowFor(code)));
+    if (state.reorder) {
+      // The stored order, so what is dragged is what is saved. Pins float back when Done is tapped.
+      visibleTargets().forEach((code) => list.appendChild(reorderRow(code)));
+    } else {
+      orderedCodes().forEach((code) => list.appendChild(rowFor(code)));
+      if (!orderRows().length) list.appendChild(el("li", "empty-note", "No currencies yet. Tap + to add one."));
+    }
+    const hint = $("convertHint");
+    if (hint) hint.textContent = state.reorder
+      ? "Pinned currencies return to the top when you tap Done."
+      : "Swipe a row right to pin it, left to delete it. Pull down to refresh.";
+  }
+
+  /** A reorder row: flag, name, code and a handle, no values. Dragging moves it in the stored list. */
+  function reorderRow(code) {
+    const li = el("li", "row reorder-row");
+    li.dataset.code = code;
+    li.appendChild(badgeFor(code));
+    const main = el("div", "row-main");
+    main.appendChild(el("div", "row-name", nameOf(code)));
+    main.appendChild(el("div", "row-code", code));
+    li.appendChild(main);
+    li.appendChild(el("div", "handle", "≡"));
+    let startY = 0, acc = 0, active = false;
+    li.addEventListener("pointerdown", (e) => {
+      active = true; startY = e.clientY; acc = 0;
+      li.classList.add("dragging");
+      try { li.setPointerCapture(e.pointerId); } catch (err) { /* synthetic events */ }
+      haptic(18);
+    });
+    li.addEventListener("pointermove", (e) => {
+      if (!active) return;
+      acc += e.clientY - startY; startY = e.clientY;
+      const rowH = li.getBoundingClientRect().height || 65;
+      const steps = Math.trunc(acc / rowH);
+      if (steps !== 0) {
+        const list = visibleTargets();
+        const from = list.indexOf(code);
+        const to = Math.max(0, Math.min(list.length - 1, from + steps));
+        if (to !== from && moveRow(code, list[to])) {
+          acc -= steps * rowH;
+          // Move the node itself, so the gesture in progress keeps its row.
+          const ul = li.parentNode;
+          const target = ul.querySelector('[data-code="' + list[to] + '"]');
+          if (target) ul.insertBefore(li, to > from ? target.nextSibling : target);
+        }
+      }
+    });
+    const stop = () => { active = false; li.classList.remove("dragging"); };
+    li.addEventListener("pointerup", stop);
+    li.addEventListener("pointercancel", stop);
+    return li;
   }
 
   function openAmountSheet() {
@@ -659,6 +815,10 @@
       b.addEventListener("click", () => { sheetClose("menu"); action(); });
       list.appendChild(b);
     };
+    item("Reorder currencies", "drag to move", () => setReorder(true));
+    item("Sound: " + (state.soundOn ? "on" : "off"), "key and row ticks", () => {
+      state.soundOn = !state.soundOn; saveState(); toast("Sound " + (state.soundOn ? "on" : "off"));
+    });
     item("Refresh rates", state.live ? "live" : "cached", () => loadRates());
     item("Add gold and silver", state.order.includes("XAU") ? "in the list" : "spot, by the ounce", () => {
       ["XAU", "XAG"].forEach((c) => { if (!state.order.includes(c)) state.order.push(c); });
@@ -684,7 +844,27 @@
   $("moreMenu").addEventListener("click", () => { renderMenu(); sheetOpen("menu"); });
   $("menuClose").addEventListener("click", () => sheetClose("menu"));
 
+  $("doneReorder").addEventListener("click", () => setReorder(false));
+
+  /* Pull the list down at the top to refresh, as the app does. */
+  (function pullToRefresh() {
+    let y0 = null, pulled = 0;
+    document.addEventListener("touchstart", (e) => {
+      const onConvert = $("screen-convert").classList.contains("active");
+      y0 = onConvert && window.scrollY <= 0 && !state.reorder && e.touches.length === 1 ? e.touches[0].clientY : null;
+      pulled = 0;
+    }, { passive: true });
+    document.addEventListener("touchmove", (e) => {
+      if (y0 !== null) pulled = e.touches[0].clientY - y0;
+    }, { passive: true });
+    document.addEventListener("touchend", () => {
+      if (y0 !== null && pulled > 80 && !state.loading) { haptic(18); loadRates(); }
+      y0 = null; pulled = 0;
+    }, { passive: true });
+  })();
+
   $("addRow").addEventListener("click", () => {
+    if (window.Screens) { window.Screens.openAdd({ list: "convert" }); return; }
     openPicker({
       title: "Add to the list",
       codes: Object.keys(CAT).filter((c) => !state.order.includes(c)),
@@ -789,7 +969,7 @@
   window.App = {
     state, CAT, DENOMS, FLAG, VERSION, flagOf, nameOf, symOf,    money, money2, whole, figure, signed, signedWhole,
     perUsd, convert, toUsd, evaluate, toast, saveState, setScreen,
-    sheetOpen, sheetClose, openKeypad, openPicker, renderAll, renderList, loadRates,
+    sheetOpen, sheetClose, openKeypad, openPicker, haptic, tick, orderRows, moveRow, removeRow, setReorder, visibleTargets, togglePin, denomsFor: (code) => window.CountView ? window.CountView.denomsFor(code) : (DENOMS[code] || []), renderAll, renderList, loadRates,
     // Exposed for the ticker's own use and for the browser checks that drive a price move.
     applyMetals, paintMetalRow, metalFeedFor,
   };
@@ -981,8 +1161,8 @@
 
   async function pick(which) {
     await ensureSupported();
-    A.openPicker({
-      title: which === "base" ? "Chart from" : "Chart to",
+    const pairArgs = {
+      title: which === "base" ? "Chart currency" : "Chart against",
       codes: supported,
       onPick: (code) => {
         s()[which] = code;
@@ -991,7 +1171,12 @@
         paintHeader();
         load();
       },
-    });
+    };
+    if (window.Screens) {
+      // Android offers the base and the rows on the list; the chart can only draw what the ECB quotes.
+      const mine = [A.state.base, ...A.orderRows()].filter((c) => supported.includes(c));
+      window.Screens.openPair({ ...pairArgs, codes: mine.length > 1 ? mine : supported, selected: s()[which] });
+    } else A.openPicker(pairArgs);
   }
 
   document.getElementById("pickBase").addEventListener("click", () => pick("base"));
@@ -1022,8 +1207,16 @@
   const c = () => A.state.count;
 
   const lineValue = (code, denom) => (c().counts[code]?.[denom] || 0) * denom;
-  const localTotal = (code) => (A.DENOMS[code] || []).reduce((sum, d) => sum + lineValue(code, d), 0);
-  const noteCount = (code) => (A.DENOMS[code] || []).reduce((sum, d) => sum + (c().counts[code]?.[d] || 0), 0);
+  // Android's ladder, plus any denomination that already holds a saved quantity (for example the old
+  // EUR 500 or AED 1000): a saved count is never dropped from the totals just because the ladder moved.
+  const denomsFor = (code) => {
+    const ladder = A.DENOMS[code] || [];
+    const extra = Object.keys(c().counts[code] || {}).map(Number)
+      .filter((d) => d > 0 && !ladder.includes(d) && (c().counts[code][d] || 0) > 0);
+    return extra.length ? [...ladder, ...extra].sort((a, b) => b - a) : ladder;
+  };
+  const localTotal = (code) => denomsFor(code).reduce((sum, d) => sum + lineValue(code, d), 0);
+  const noteCount = (code) => denomsFor(code).reduce((sum, d) => sum + (c().counts[code]?.[d] || 0), 0);
 
   function totals() {
     let usd = 0, notes = 0, withMoney = 0;
@@ -1092,7 +1285,7 @@
 
     const body = document.createElement("div");
     body.className = "cur-body";
-    (A.DENOMS[code] || []).forEach((denom) => body.appendChild(rowFor(code, denom)));
+    denomsFor(code).forEach((denom) => body.appendChild(rowFor(code, denom)));
     section.appendChild(body);
 
     const foot = document.createElement("div");
@@ -1332,5 +1525,5 @@
 
   document.getElementById("countRates").addEventListener("click", () => A.loadRates());
 
-  window.CountView = { render };
+  window.CountView = { render, denomsFor };
 })();
