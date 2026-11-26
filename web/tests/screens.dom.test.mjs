@@ -235,3 +235,10 @@ test("dragging a reorder row across several rows keeps moving it", () => {
     assert.deepEqual([...w.App.state.order], ["EUR", "AED", "XAU", "LBP"], "three rows crossed in one drag");
   } finally { close(w); }
 });
+
+test("the service worker revalidates files instead of serving a stale copy first", () => {
+  const sw = read("sw.js");
+  assert.ok(!/hit \|\| network/.test(sw), "no cache-first branch for same-origin files");
+  assert.equal((sw.match(/cache: "no-cache"/g) || []).length, 2, "navigations and assets both revalidate");
+  assert.ok(sw.includes('"./screens.js"'), "screens.js is in the offline shell");
+});
