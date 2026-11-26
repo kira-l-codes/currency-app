@@ -137,3 +137,17 @@ number typed from a local run.
 They do **not** cover the open items, the visual parity work, or the Android experience on a real
 device: the APK has been exercised on the owner's phone, but not in this review pass, and no emulator
 is available here.
+
+## 11. Screens added in web 2.2 (swipe, reorder, Add Currency, metals sheet, sound)
+
+| Behaviour | Android source | Web | Test |
+|---|---|---|---|
+| Swipe a row right pins, left deletes; the base row does not swipe | `ConvertScreen.kt` SwipeRow | `app.js` attachSwipe | `screens.dom.test.mjs` swipe tests |
+| Pinned rows first, in pin order | `orderRows` | `orderRows()` | pinned order test |
+| Reorder mode with Done, `moveItem` semantics | `ConvertScreen.kt` | `setReorder`, `moveRow` | reorder test |
+| Pull down refreshes; thin progress bar while loading | `ConvertScreen.kt` | `pullToRefresh`, `#loadBar` | manual only (touch) |
+| Add Currency screen: tabs, search by name/code/country/region, letter sections, scrubber over 2 sections | `AddCurrencyScreen.kt` | `screens.js` openAdd | Add Currency tests, GEO equals `Currencies.kt` |
+| Chart pair picker lists base and rows | `PairPickerScreen.kt` | `screens.js` openPair | pair picker test |
+| A metal row opens the metals sheet, it does not set the base; ounce, gram karats, gold pound | `MetalsSheet.kt` | `screens.js` openMetals | metals sheet tests |
+| Sound toggle, tick, vibration, splash once per launch | `Sfx.kt`, `Haptics.kt`, `SplashOverlay.kt` | `app.js` tick/haptic, `screens.js` splash | sound and splash tests |
+| A saved quantity for a denomination Android lacks keeps showing and counting | safety rule | `denomsFor` | extra denomination test |
