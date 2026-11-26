@@ -11,7 +11,7 @@
  * Bump CACHE whenever the shell changes — the HTML and JS are served from this cache, so a stale
  * version string means users keep the old build until they clear site data.
  */
-const CACHE = "currency-shell-v23";
+const CACHE = "currency-shell-v24";
 const SHELL = [
   "./",
   "./index.html",
@@ -49,7 +49,7 @@ self.addEventListener("fetch", (event) => {
   // is only the fallback when the network is gone. Static assets stay cache-first for speed.
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).then((res) => {
+      fetch(request, { cache: "no-cache" }).then((res) => {
         if (res && res.ok) caches.open(CACHE).then((cache) => cache.put("./index.html", res.clone()));
         return res;
       }).catch(() => caches.match("./index.html").then((hit) => hit || caches.match("./")))
@@ -57,15 +57,15 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Same-origin files go to the network first, so a deploy shows on the next load and the page never
+  // runs new HTML against old scripts. The cache is the fallback when the network is gone.
   if (url.origin === location.origin) {
     event.respondWith(
-      caches.match(request).then((hit) => {
-        const network = fetch(request).then((res) => {
-          if (res && res.ok) caches.open(CACHE).then((cache) => cache.put(request, res.clone()));
-          return res;
-        }).catch(() => hit);
-        return hit || network;
-      })
+      // no-cache: ask the server whether the file changed instead of trusting the browser's 10 minute copy.
+      fetch(request, { cache: "no-cache" }).then((res) => {
+        if (res && res.ok) caches.open(CACHE).then((cache) => cache.put(request, res.clone()));
+        return res;
+      }).catch(() => caches.match(request))
     );
     return;
   }
