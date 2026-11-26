@@ -356,3 +356,22 @@ body{
 
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* Count keypad: the small pad Android uses for quantities (digits only) and for Expected (digits and
+   a point). No operators, no 1K/100/10, no C. Three columns, laid out 1 2 3 / 4 5 6 / 7 8 9 / . 0 ⌫. */
+.keypad.kp-notes .kp-grid,.keypad.kp-plain .kp-grid{grid-template-columns:repeat(3,1fr)}
+.keypad.kp-notes .kp-key.pill,.keypad.kp-plain .kp-key.pill,
+.keypad.kp-notes .kp-key.dark,.keypad.kp-plain .kp-key.dark{display:none}
+.keypad.kp-notes .kp-key[data-key="."]{visibility:hidden}
+.keypad.kp-notes .kp-key[data-key="1"],.keypad.kp-plain .kp-key[data-key="1"]{order:1}
+.keypad.kp-notes .kp-key[data-key="2"],.keypad.kp-plain .kp-key[data-key="2"]{order:2}
+.keypad.kp-notes .kp-key[data-key="3"],.keypad.kp-plain .kp-key[data-key="3"]{order:3}
+.keypad.kp-notes .kp-key[data-key="4"],.keypad.kp-plain .kp-key[data-key="4"]{order:4}
+.keypad.kp-notes .kp-key[data-key="5"],.keypad.kp-plain .kp-key[data-key="5"]{order:5}
+.keypad.kp-notes .kp-key[data-key="6"],.keypad.kp-plain .kp-key[data-key="6"]{order:6}
+.keypad.kp-notes .kp-key[data-key="7"],.keypad.kp-plain .kp-key[data-key="7"]{order:7}
+.keypad.kp-notes .kp-key[data-key="8"],.keypad.kp-plain .kp-key[data-key="8"]{order:8}
+.keypad.kp-notes .kp-key[data-key="9"],.keypad.kp-plain .kp-key[data-key="9"]{order:9}
+.keypad.kp-notes .kp-key[data-key="."],.keypad.kp-plain .kp-key[data-key="."]{order:10}
+.keypad.kp-notes .kp-key[data-key="0"],.keypad.kp-plain .kp-key[data-key="0"]{order:11}
+.keypad.kp-notes .kp-key[data-key="back"],.keypad.kp-plain .kp-key[data-key="back"]{order:12}
