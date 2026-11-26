@@ -106,6 +106,10 @@ version written afterwards is what makes every later load unambiguous. It is not
 | hiding a currency keeps its quantities | ✅ | ✅ | `parity.dom.test.mjs` |
 | the quantity keypad is a small integer-only pad (12 characters); Expected adds a point; no operators or shortcuts | ✅ `CountKeypadSheet` | ✅ | `parity.dom.test.mjs` |
 | a base change never adds the old base as a row | ✅ `setBase` | ✅ | `parity.dom.test.mjs` |
+| banknote ladders per currency are Android's `Banknotes.kt` (20 currencies) | ✅ | ✅ | `parity.dom.test.mjs` reads the Kotlin file |
+| a fresh install: Android's default list (+ gold and silver), nothing pinned, bag USD + LBP | ✅ | ✅ | `parity.dom.test.mjs` |
+| every fiat currency in `CurrencyCatalog.fiat` is listed, with its flag | ✅ | ✅ (existing names and symbols kept) | `parity.dom.test.mjs` |
+| menu: Sort A → Z, Sort by value, Restore default list | ✅ | ✅ | `parity.dom.test.mjs` |
 
 ## 8. Platform differences that are deliberate
 
