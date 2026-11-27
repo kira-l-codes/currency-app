@@ -175,7 +175,7 @@ test("Add Currency searches by name, code, country and region, and toggles rows"
     assert.ok(w.document.querySelector('#addBody .add-row[data-code="USD"] .base-tag'));
     assert.ok(!w.document.getElementById("addScrub").hidden, "many sections show the scrubber");
     click(w, '.seg-tab[data-tab="crypto"]');
-    assert.deepEqual(shown().sort(), ["BTC", "ETH"]);
+    assert.deepEqual(shown().sort(), Object.keys(w.App.CRYPTO_IDS).sort(), "all sixteen coins, as on Android");
     click(w, '.seg-tab[data-tab="metal"]');
     assert.deepEqual(shown().sort(), ["XAG", "XAU"]);
     assert.ok(w.document.getElementById("addBody").textContent.includes("priced by the troy ounce"));
