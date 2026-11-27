@@ -1,7 +1,7 @@
 package com.lamahuissn.currency
 
 import com.lamahuissn.currency.data.CryptoBadge
-import com.lamahuissn.currency.data.Currencies
+import com.lamahuissn.currency.data.CurrencyCatalog
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -10,8 +10,8 @@ import org.junit.Test
 class CryptoBadgeTest {
     @Test
     fun everyCoinHasItsOwnColour() {
-        Currencies.crypto.forEach { assertTrue(it.code, CryptoBadge.isCoin(it.code)) }
-        val colours = Currencies.crypto.map { CryptoBadge.colourOf(it.code) }
+        CurrencyCatalog.crypto.forEach { assertTrue(it.code, CryptoBadge.isCoin(it.code)) }
+        val colours = CurrencyCatalog.crypto.map { CryptoBadge.colourOf(it.code) }
         assertTrue(colours.none { it == 0xFF26262A })
     }
 
