@@ -33,8 +33,7 @@ The two builds are meant to behave the same. Android is the reference; where And
 mistake is fixed there too rather than copied. `docs/CONTRACT.md` lists every rule, how each build
 stands, and which test checks it.
 
-Known differences: Android lists 16 crypto coins, the web has BTC and ETH only (see
-`docs/DECISIONS.md`). Web storage is `localStorage`, Android uses SharedPreferences, and there is no
+Known differences: the web has no chart for coins (the ECB has none, see `docs/DECISIONS.md`). Web storage is `localStorage`, Android uses SharedPreferences, and there is no
 sync between them. Touch behaviour (swipe, pull-to-refresh, vibration, sound, splash) is written from
 the Android code and checked in tests, but has not been verified on a real phone for the web.
 
