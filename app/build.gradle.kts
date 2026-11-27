@@ -33,8 +33,8 @@ android {
         applicationId = "com.lamahuissn.currency"
         minSdk = 26
         targetSdk = 36
-        versionCode = 24
-        versionName = "1.9.4"
+        versionCode = 25
+        versionName = "1.9.5"
     }
 
     if (!keystoreProperties.isEmpty) {
