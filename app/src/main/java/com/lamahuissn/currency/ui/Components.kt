@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lamahuissn.currency.data.GestureAxis
 import com.lamahuissn.currency.data.GestureRules
+import com.lamahuissn.currency.data.CryptoBadge
 import com.lamahuissn.currency.data.Metals
 import com.lamahuissn.currency.data.Tick
 import kotlinx.coroutines.launch
@@ -79,6 +80,11 @@ fun FlagDot(flag: String, code: String, size: Dp = 36.dp) {
     // Gold and silver have no flag: they get an ingot drawn in their own metal instead.
     if (Metals.isMetal(code)) {
         MetalDot(code = code, size = size)
+        return
+    }
+    // Coins have no flag either: a coloured disc with the ticker on it, never a lone letter.
+    if (flag.isEmpty() && CryptoBadge.isCoin(code)) {
+        CoinDot(code = code, size = size)
         return
     }
     Box(
@@ -424,6 +430,27 @@ fun RoundButton(
     ) { content() }
 }
 
+
+/** A coin: its brand-ish colour as a disc with the ticker in white, same as the web badges. */
+@Composable
+fun CoinDot(code: String, size: Dp = 36.dp) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(Color(CryptoBadge.colourOf(code))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = code,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            fontSize = (size.value * CryptoBadge.fontScale(code)).sp,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
 
 /**
  * The mark for gold and silver: a bullion bar drawn in its own metal, so the row reads as bullion at
