@@ -52,6 +52,8 @@ fun KeypadSheet(
     initialAmount: Double,
     onDismiss: () -> Unit,
     onConvert: (Double) -> Unit,
+    /** Replaces the currency name in the header, e.g. for the manual rate entry. */
+    title: String? = null,
 ) {
     val currency = CurrencyCatalog.of(code)
     var entry by remember(code, initialAmount) {
@@ -85,7 +87,7 @@ fun KeypadSheet(
                 FlagDot(flag = currency.flag, code = currency.code, size = 34.dp)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(currency.name, color = Ink.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(title ?: currency.name, color = Ink.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                     Text(currency.code, color = Color(0xFFB9A7A8), fontSize = 12.sp, letterSpacing = 0.6.sp)
                 }
                 RoundButton(
