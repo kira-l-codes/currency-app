@@ -51,6 +51,8 @@ data class ConvertUi(
     val soundOn: Boolean = true,
     /** Units of each currency per 1 US dollar — the one table every figure is derived from. */
     val usdTo: Map<String, Double> = emptyMap(),
+    /** Optional manual LBP per USD. Null = automatic. Replaces only LBP, never the saved table. */
+    val lbpManual: Double? = null,
     val updatedAt: Long = 0L,
     /** When the metals were last read — they move intraday, the fiat table does not. */
     val metalsAt: Long = 0L,
@@ -59,10 +61,14 @@ data class ConvertUi(
     val loading: Boolean = false,
     val error: String? = null,
 ) {
+    /** [usdTo] with the manual Lebanese pound rate laid over it when one is set. */
+    val rates: Map<String, Double>
+        get() = if (lbpManual != null && lbpManual > 0.0) usdTo + ("LBP" to lbpManual) else usdTo
+
     fun rate(from: String, to: String): Double? {
         if (from == to) return 1.0
-        val a = usdTo[from] ?: return null
-        val b = usdTo[to] ?: return null
+        val a = rates[from] ?: return null
+        val b = rates[to] ?: return null
         if (a == 0.0) return null
         // 1 unit of `from` is (1/a) dollars, and each dollar is b units of `to`.
         return b / a
@@ -132,6 +138,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             targets = prefs.targets,
             pinned = prefs.pinned,
             soundOn = prefs.soundOn,
+            lbpManual = prefs.lbpManual,
             usdTo = prefs.cachedRates,
             updatedAt = prefs.updatedAt,
             metalMotion = RatesMerge.decodeBook(prefs.metalBook),
@@ -292,6 +299,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             prefs.targets = next
             state.copy(targets = next)
         }
+    }
+
+    /** Sets the manual LBP rate (LBP per 1 USD), or turns it off with null. */
+    fun setLbpManual(value: Double?) {
+        val next = value?.takeIf { it > 0.0 && it.isFinite() }
+        prefs.lbpManual = next
+        _convert.update { it.copy(lbpManual = next) }
     }
 
     fun toggleSound() {
