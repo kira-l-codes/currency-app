@@ -111,6 +111,18 @@ version written afterwards is what makes every later load unambiguous. It is not
 | every fiat currency in `CurrencyCatalog.fiat` is listed, with its flag | ✅ | ✅ (existing names and symbols kept) | `parity.dom.test.mjs` |
 | menu: Sort A → Z, Sort by value, Restore default list | ✅ | ✅ | `parity.dom.test.mjs` |
 
+## 7a. Crypto (added web 2.5)
+
+| Rule | Android | Web | Check |
+| --- | --- | --- | --- |
+| the same 16 coins, names, symbols and CoinGecko ids | ✅ `CurrencyCatalog` | ✅ | `crypto.test.mjs` compares the web list with `Currencies.kt` |
+| one keyless request prices all coins; a coin is stored as units per 1 USD (`1/price`) | ✅ | ✅ | `crypto.test.mjs` |
+| a coin the feed leaves out has no price and reads a dash | ✅ | ✅ | `crypto.test.mjs` |
+| a failed coin feed keeps the last prices and the row says "cached" | ❌ one timestamp | ✅ | `crypto.test.mjs` |
+| a coin whose provider time is over 1 hour old says "delayed" | ❌ | ✅ | `crypto.test.mjs` |
+| a coin badge never depends on a symbol glyph (ticker text on a coloured disc) | n/a | ✅ | `crypto.test.mjs`, browser run |
+| coin charts | ✅ CoinGecko history | ❌ not built, the ECB has no coins | **open** |
+
 ## 8. Platform differences that are deliberate
 
 - **Storage**: `localStorage` and a service worker on the web; SharedPreferences and an APK on
