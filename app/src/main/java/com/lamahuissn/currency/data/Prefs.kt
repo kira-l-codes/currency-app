@@ -40,6 +40,21 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("soundOn", true)
         set(value) = sp.edit().putBoolean("soundOn", value).apply()
 
+    /**
+     * Optional street rate for the Lebanese pound, in LBP per 1 USD. Null means off: the automatic
+     * rate is used. Kept apart from [cachedRates] so a refresh never overwrites it and turning it
+     * off brings the automatic rate straight back.
+     */
+    var lbpManual: Double?
+        get() = sp.getString("lbpManual", null)?.toDoubleOrNull()?.takeIf { it > 0.0 && it.isFinite() }
+        set(value) {
+            if (value != null && value > 0.0 && value.isFinite()) {
+                sp.edit().putString("lbpManual", value.toString()).apply()
+            } else {
+                sp.edit().remove("lbpManual").apply()
+            }
+        }
+
     /** Set once, on the update that brought gold and silver into the list. */
     var metalsSeeded: Boolean
         get() = sp.getBoolean("metalsSeeded", false)
