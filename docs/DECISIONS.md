@@ -32,9 +32,22 @@ here, and the live web app is served from here. The original is not updated.
 write safety and a Restore flow. It is a proposal only. Nothing in it is implemented. Pick it up
 only if storage problems show up in real use.
 
-## Held: more crypto coins on the web
-Android lists 16 crypto coins. The web has BTC and ETH only. Adding the rest needs a price source
-for each coin (the web currently has none for them), so it was held until the owner decides.
+## Crypto: all 16 coins on the web (decided 2026-11-27)
+The owner confirmed the web should list the same 16 coins as Android and asked for fixed icons.
+- **Source: CoinGecko `simple/price`, no key.** It is the source Android already uses, so both builds
+  quote the same numbers. One request prices all 16 coins, allows browser calls (CORS), and returns
+  the time each coin was last updated (`include_last_updated_at`). Checked on 2026-11-27 against
+  Coinbase's spot price for all 16 coins: every one within 0.5% (BTC 61,618 vs 61,604 USD).
+- **Honest age.** A coin whose provider update is over an hour old reads "delayed". If the feed cannot
+  be reached (offline, rate limit, bad reply) the last prices stay and read "cached". A coin the feed
+  leaves out loses its price and shows a dash. Nothing is made up.
+- **Icons.** The old badge printed the symbol (₿, Ξ). Devices without a font for ₿ drew an empty box.
+  A coin badge is now a coloured disc with the ticker as text, which every device can draw. In
+  amounts, a symbol the device cannot draw falls back to the ticker.
+- **Free-tier limit.** CoinGecko's keyless tier is rate limited. One call per refresh keeps the app
+  well inside it. A limit shows as "cached", not as a wrong price.
+- **Not done:** coin charts. Android draws them from CoinGecko history. The web chart uses ECB data,
+  which has no coins, so it says so instead of drawing a guess.
 
 ## Not verified on a real phone
 Web pull-to-refresh, vibration, sound and the splash animation were written from the Android code
