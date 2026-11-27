@@ -2,6 +2,16 @@
 
 Web version numbers are the ones shown in the app. Android is untouched on 2026-11-26.
 
+## 2026-11-27 — web 2.6 and Android 1.9.5 (optional manual LBP rate)
+
+- **Manual LBP rate, optional.** In the list menu, "Manual LBP rate" takes the number of LBP per 1 USD
+  as people trade it (for example 90,000). While it is on, every LBP figure uses it (list, Count) and
+  the status line says "LBP manual 90,000". "Back to automatic LBP rate" turns it off. It is saved on
+  the device, a refresh does not overwrite it, and the saved automatic table and saved counts are
+  never changed. Only LBP is affected.
+- Tests: new `lbp-manual.test.mjs` (web 99/99) and `LbpManualTest` (Android). Android versionCode 25.
+- Service worker cache bumped to v26.
+
 ## 2026-11-27 — Android 1.9.4 (coin icons)
 
 - **Crypto icons fixed on Android.** Coins showed a lone letter placeholder. Each coin is now a coloured
