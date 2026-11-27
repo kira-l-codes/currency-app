@@ -2,6 +2,12 @@
 
 Web version numbers are the ones shown in the app. Android is untouched on 2026-11-26.
 
+## 2026-11-27 — Android 1.9.4 (coin icons)
+
+- **Crypto icons fixed on Android.** Coins showed a lone letter placeholder. Each coin is now a coloured
+  disc with its ticker, the same as the web badges. New `CryptoBadge` rules with unit tests.
+- Signed with the repo release key. Install by updating over 1.9.3 from the first fork build (versionCode 24).
+
 ## 2026-11-27 — web 2.5 (all 16 coins, icon fix)
 
 - **16 crypto coins on the web**, the same list and names as Android: BTC, ETH, USDT, USDC, BNB, SOL,
