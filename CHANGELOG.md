@@ -2,6 +2,17 @@
 
 Web version numbers are the ones shown in the app. Android is untouched on 2026-11-26.
 
+## 2026-11-27 — web 2.5 (all 16 coins, icon fix)
+
+- **16 crypto coins on the web**, the same list and names as Android: BTC, ETH, USDT, USDC, BNB, SOL,
+  XRP, ADA, DOGE, TRX, TON, LINK, DOT, LTC, BCH, XLM. Priced from CoinGecko (no key), one request.
+- **Crypto icons fixed.** The ₿ symbol drew an empty box on some browsers. Coin badges are now a
+  coloured disc with the ticker, in every list.
+- **Honest age for coins.** "cached" when the feed could not be reached, "delayed" when the provider
+  price is over an hour old. A coin with no price shows a dash.
+- Add Currency's Crypto tab lists all 16. Service worker cache bumped to v25.
+- Tests: new `crypto.test.mjs` (7 cases). Web suite 95/95.
+
 ## 2026-11-26 — web 2.2 to 2.4 (web parity with Android)
 
 All checked in CI. Final state: web 89/89 tests, JVM 142 tests, 0 failures.
