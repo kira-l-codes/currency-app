@@ -7,7 +7,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "web 2.4";
+  const VERSION = "web 2.5";
 
   /* ── catalogue ───────────────────────────────────────────────────────────── */
   const CAT = {
@@ -32,6 +32,11 @@
     HUF:["Hungarian Forint","Ft"],      RON:["Romanian Leu","lei"],     SEK:["Swedish Krona","kr"],
     NOK:["Norwegian Krone","kr"],       DKK:["Danish Krone","kr"],      CHF:["Swiss Franc","CHF"],
     ISK:["Icelandic Krona","kr"],       BTC:["Bitcoin","₿"],            ETH:["Ethereum","Ξ"],
+    /* Android's other fourteen coins (Currencies.kt, same names and symbols). */
+    USDT:["Tether","₮"], USDC:["USD Coin","$"], BNB:["BNB","BNB"], SOL:["Solana","SOL"],
+    XRP:["XRP","XRP"], ADA:["Cardano","ADA"], DOGE:["Dogecoin","Ð"], TRX:["TRON","TRX"],
+    TON:["Toncoin","TON"], LINK:["Chainlink","LINK"], DOT:["Polkadot","DOT"], LTC:["Litecoin","Ł"],
+    BCH:["Bitcoin Cash","BCH"], XLM:["Stellar","XLM"],
     /* The rest of Android's fiat catalogue (same names and symbols). */
     AFN:["Afghan Afghani","؋"], ALL:["Albanian Lek","L"], AOA:["Angolan Kwanza","Kz"],
     AMD:["Armenian Dram","֏"], AWG:["Aruban Florin","ƒ"], AZN:["Azerbaijani Manat","₼"],
@@ -126,7 +131,22 @@
   // No baked-in crypto: a coin has no "reference rate" and quoting a hardcoded price as if it were
   // live is the kind of lie this app refuses. They arrive from CoinGecko or they read "—".
 
-  const CRYPTO_IDS = { BTC: "bitcoin", ETH: "ethereum" };
+  // The same sixteen coins and CoinGecko ids as Android's CurrencyCatalog.cryptoIds.
+  const CRYPTO_IDS = {
+    BTC: "bitcoin", ETH: "ethereum", USDT: "tether", USDC: "usd-coin", BNB: "binancecoin",
+    SOL: "solana", XRP: "ripple", ADA: "cardano", DOGE: "dogecoin", TRX: "tron",
+    TON: "the-open-network", LINK: "chainlink", DOT: "polkadot", LTC: "litecoin",
+    BCH: "bitcoin-cash", XLM: "stellar",
+  };
+  const isCrypto = (code) => Object.prototype.hasOwnProperty.call(CRYPTO_IDS, code);
+  // A quote the provider last updated more than this long ago is shown as delayed, not as live.
+  const CRYPTO_STALE_MS = 60 * 60 * 1000;
+  // Brand-ish colours for the coin badges (a badge is a coloured disc with the ticker on it).
+  const CRYPTO_COLOUR = {
+    BTC:"#F7931A", ETH:"#627EEA", USDT:"#26A17B", USDC:"#2775CA", BNB:"#C99400", SOL:"#8A4DE8",
+    XRP:"#3A4650", ADA:"#2A6FD6", DOGE:"#C2A633", TRX:"#D6342B", TON:"#0098EA", LINK:"#2A5ADA",
+    DOT:"#D0107A", LTC:"#5C6B7A", BCH:"#2FA84F", XLM:"#4A5560",
+  };
 
   // Android's default list (Prefs.DEFAULT_TARGETS), then gold and silver, which Android seeds once.
   const ANDROID_TARGETS = ["LBP","EGP","TRY","EUR","INR","GBP","DKK","BTC","SYP","NGN","SAR"];
@@ -136,6 +156,7 @@
   const state = {
     base:"USD", amount:100,
     rates:{ ...FALLBACK }, metals:{}, metalMeta:{}, updated:0, live:false,
+    cryptoAt:{}, cryptoOk:true,
     order:[...DEFAULT_ORDER], pinned:[], screen:"convert", soundOn:true, reorder:false, loading:false,
     chart:{ base:"EUR", quote:"USD", period:"3M" },
     count:{ bag:["USD","LBP"], counts:{}, expected:null, history:[], collapsed:[] },
@@ -172,7 +193,41 @@
     return String.fromCodePoint(...[...cc].map((c) => 0x1F1E6 + c.charCodeAt(0) - 65));
   };
   const nameOf = (code) => (CAT[code] || [code])[0];
-  const symOf = (code) => (CAT[code] || [, ""])[1] || "";
+  /* A coin symbol the device has no glyph for (₿ on older fonts) draws as an empty box, so such a
+     symbol is replaced by the ticker. Where nothing can be measured (tests) the symbol is kept. */
+  const glyphCache = {};
+  const hasGlyph = (ch) => {
+    if (ch in glyphCache) return glyphCache[ch];
+    let ok = true;
+    try {
+      const c = document.createElement("canvas").getContext("2d");
+      if (c && typeof c.measureText === "function") {
+        c.font = "20px sans-serif";
+        const w = c.measureText(ch).width, box = c.measureText("\u{10FFFF}").width;
+        ok = w > 0 && Math.abs(w - box) > 0.01;
+      }
+    } catch (e) { ok = true; }
+    return (glyphCache[ch] = ok);
+  };
+  const symOf = (code) => {
+    const s = (CAT[code] || [, ""])[1] || "";
+    return s && isCrypto(code) && !hasGlyph(s) ? code : s;
+  };
+  /* One badge for every list: metals, coins, flags, then the plain symbol. */
+  const fillBadge = (b, code) => {
+    if (code === "XAU") { b.classList.add("metal-gold"); b.textContent = "Au"; return b; }
+    if (code === "XAG") { b.classList.add("metal-silver"); b.textContent = "Ag"; return b; }
+    if (isCrypto(code)) {
+      b.classList.add("crypto", "t" + Math.min(code.length, 4));
+      b.style.background = CRYPTO_COLOUR[code] || "#26262A";
+      b.textContent = code;                      // a ticker is text, so it never depends on a glyph
+      return b;
+    }
+    const f = flagOf(code);
+    if (f) { b.classList.add("flag"); b.textContent = f; }
+    else { b.classList.add("fiat"); b.textContent = symOf(code) || code.slice(0, 1); }
+    return b;
+  };
 
   /* Two decimals on every converted amount, four only where cents would round to nothing — the app
      shows E£5,389.90 and 8,955,064.00, and a web build that rounds to whole numbers reads as broken. */
@@ -257,6 +312,19 @@
     return M.metalState(hasPrice, Boolean(meta && meta.atKnown), meta ? meta.atMs : 0, Date.now());
   }
 
+  /**
+   * Honest age of a coin price: "cached" when the last refresh could not reach the feed, "delayed"
+   * when the provider's own update time is over an hour old, nothing while it is fresh. A coin with no
+   * price says nothing here, its row already reads "—".
+   */
+  function cryptoNote(code) {
+    if (!isCrypto(code) || !(state.rates[code] > 0)) return "";
+    if (state.cryptoOk === false) return "cached";
+    const at = state.cryptoAt[code];
+    if (!at) return "age unknown";
+    return Date.now() - at > CRYPTO_STALE_MS ? "delayed" : "";
+  }
+
   const METALS_LABEL = { live: "live", delayed: "delayed", offline: "offline" };
 
   /* ── expression parser ───────────────────────────────────────────────────── */
@@ -282,7 +350,7 @@
         base: state.base, amount: state.amount, order: state.order, pinned: state.pinned,
         screen: state.screen,        chart: state.chart, count: state.count,
         rates: state.rates, metals: state.metals, updated: state.updated,
-        metalMeta: state.metalMeta, sound: state.soundOn,
+        metalMeta: state.metalMeta, cryptoAt: state.cryptoAt, sound: state.soundOn,
       }));
       return true;
     } catch (e) { return false; }          // private mode: it still works, it just forgets
@@ -335,6 +403,7 @@
       if (s.metals) state.metals = s.metals;   // already in ounces-per-dollar after migrateRecord
       // A stored publication time lets the first paint say DELAYED instead of pretending.
       if (s.metalMeta) state.metalMeta = s.metalMeta;
+      if (s.cryptoAt && typeof s.cryptoAt === "object") state.cryptoAt = s.cryptoAt;
       if (s.updated) state.updated = s.updated;
       if (typeof s.sound === "boolean") state.soundOn = s.sound;
     } catch (e) {
@@ -450,9 +519,7 @@
       hits.forEach((code) => {
         const row = el("div", "picker-item");
         const badge = el("div", "badge");
-        const f = flagOf(code);
-        if (f) { badge.classList.add("flag"); badge.textContent = f; }
-        else { badge.classList.add("fiat"); badge.textContent = symOf(code) || code.slice(0, 1); }
+        fillBadge(badge, code);
         row.appendChild(badge);
         const col = el("div");
         col.appendChild(el("div", "pi1", code + " · " + nameOf(code)));
@@ -511,16 +578,25 @@
         fetch("https://open.er-api.com/v6/latest/USD", { cache: "no-store" }).then((r) => r.json()),
         fetch("https://api.gold-api.com/price/XAU", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
         fetch("https://api.gold-api.com/price/XAG", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
-        fetch("https://api.coingecko.com/api/v3/simple/price?ids=" + cryptoIds + "&vs_currencies=usd", { cache: "no-store" })
-          .then((r) => r.json()).catch(() => null),
+        fetch("https://api.coingecko.com/api/v3/simple/price?ids=" + cryptoIds + "&vs_currencies=usd&include_last_updated_at=true", { cache: "no-store" })
+          .then((r) => (r.ok === false ? null : r.json())).catch(() => null),
       ]);
       if (fiat && fiat.rates) state.rates = { ...state.rates, ...fiat.rates };
       // A coin worth N dollars is 1/N of a dollar's worth of coin; no reply means no price.
-      if (crypto) {
+      // `crypto` is null when the call failed or came back unusable: then the last known coin
+      // prices stay on screen, marked "cached", instead of being passed off as live or blanked.
+      const cryptoUsable = Boolean(crypto) && Object.values(CRYPTO_IDS).some((id) => crypto[id] && crypto[id].usd > 0);
+      state.cryptoOk = cryptoUsable;
+      if (cryptoUsable) {
+        const now = Date.now();
         Object.entries(CRYPTO_IDS).forEach(([code, id]) => {
           const usd = crypto[id] && crypto[id].usd;
-          if (usd > 0) state.rates[code] = 1 / usd;
-          else delete state.rates[code];
+          if (usd > 0) {
+            state.rates[code] = 1 / usd;
+            // CoinGecko says when it last updated each coin (seconds); without it, the time we got it.
+            const at = crypto[id].last_updated_at;
+            state.cryptoAt[code] = at > 0 ? at * 1000 : now;
+          } else { delete state.rates[code]; delete state.cryptoAt[code]; }
         });
       }
       const quotes = {};
@@ -542,13 +618,7 @@
 
   /* ── convert ─────────────────────────────────────────────────────────────── */
   function badgeFor(code) {
-    const b = el("div", "badge");
-    if (code === "XAU") { b.classList.add("metal-gold"); b.textContent = "Au"; return b; }
-    if (code === "XAG") { b.classList.add("metal-silver"); b.textContent = "Ag"; return b; }
-    const f = flagOf(code);
-    if (f) { b.classList.add("flag"); b.textContent = f; }
-    else { b.classList.add("fiat"); b.textContent = symOf(code) || code.slice(0, 1); }
-    return b;
+    return fillBadge(el("div", "badge"), code);
   }
 
   /** Rows in the app's order: the base first, then pinned, then the watch list. */
@@ -639,7 +709,8 @@
     name.appendChild(el("span", null, nameOf(code)));
     if (state.pinned.includes(code) && code !== state.base) name.appendChild(el("span", "pin", "📌"));
     main.appendChild(name);
-    main.appendChild(el("div", "row-code", code));
+    const note = cryptoNote(code);
+    main.appendChild(el("div", "row-code" + (note ? " stale" : ""), note ? code + " · " + note : code));
     li.appendChild(main);
 
     const value = el("div", "pill-value");
@@ -844,7 +915,7 @@
       if (installEvent) installEvent.prompt();
       else toast("Browser menu → Add to Home screen");
     });
-    item("About", VERSION, () => toast("Rates: open.er-api · gold: gold-api · chart: ECB"));
+    item("About", VERSION, () => toast("Rates: open.er-api · gold: gold-api · coins: CoinGecko · chart: ECB"));
   }
   $("moreMenu").addEventListener("click", () => { renderMenu(); sheetOpen("menu"); });
   $("menuClose").addEventListener("click", () => sheetClose("menu"));
@@ -972,7 +1043,7 @@
 
   /* ── expose + boot ───────────────────────────────────────────────────────── */
   window.App = {
-    state, CAT, DENOMS, FLAG, VERSION, flagOf, nameOf, symOf,    money, money2, whole, figure, signed, signedWhole,
+    state, CAT, DENOMS, FLAG, VERSION, flagOf, nameOf, symOf, fillBadge, isCrypto, cryptoNote, CRYPTO_IDS,    money, money2, whole, figure, signed, signedWhole,
     perUsd, convert, toUsd, evaluate, toast, saveState, setScreen,
     sheetOpen, sheetClose, openKeypad, openPicker, haptic, tick, orderRows, moveRow, removeRow, setReorder, visibleTargets, togglePin, denomsFor: (code) => window.CountView ? window.CountView.denomsFor(code) : (DENOMS[code] || []), renderAll, renderList, loadRates,
     // Exposed for the ticker's own use and for the browser checks that drive a price move.
@@ -1245,10 +1316,7 @@
   function badgeFor(code) {
     const b = document.createElement("div");
     b.className = "badge";
-    const f = A.flagOf(code);
-    if (f) { b.classList.add("flag"); b.textContent = f; }
-    else { b.classList.add("fiat"); b.textContent = A.symOf(code) || code; }
-    return b;
+    return A.fillBadge(b, code);
   }
 
   /* ── one currency inside the bag ─────────────────────────────────────────── */
