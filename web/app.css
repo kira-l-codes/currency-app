@@ -86,6 +86,11 @@ body{
 }
 .badge.metal-gold{background:linear-gradient(145deg,#FFE08A,#E0AE2B 58%,#8A5E00);color:#3A2600;font-size:13px;font-weight:800}
 .badge.metal-silver{background:linear-gradient(145deg,#F7F7FA,#C9C9CF 58%,#6E6E75);color:#26262A;font-size:13px;font-weight:800}
+.badge.crypto{color:#fff;font-weight:800;letter-spacing:-.02em;font-size:11px;text-shadow:0 1px 1px rgba(0,0,0,.25)}
+.badge.crypto.t4{font-size:9.5px}
+.badge.crypto.t3{font-size:11px}
+.badge.crypto.t4,.badge.crypto.t3{letter-spacing:-.04em}
+.row-code.stale{color:#E0A33A}
 .badge.fiat{background:#26262A;color:#EDEDEF;font-size:12px;font-weight:700}
 .row-main{flex:1;min-width:0}
 .row-name{
