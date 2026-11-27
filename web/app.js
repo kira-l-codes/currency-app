@@ -7,7 +7,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "web 2.5";
+  const VERSION = "web 2.6";
 
   /* ── catalogue ───────────────────────────────────────────────────────────── */
   const CAT = {
@@ -156,7 +156,7 @@
   const state = {
     base:"USD", amount:100,
     rates:{ ...FALLBACK }, metals:{}, metalMeta:{}, updated:0, live:false,
-    cryptoAt:{}, cryptoOk:true,
+    cryptoAt:{}, cryptoOk:true, lbpManual:null,
     order:[...DEFAULT_ORDER], pinned:[], screen:"convert", soundOn:true, reorder:false, loading:false,
     chart:{ base:"EUR", quote:"USD", period:"3M" },
     count:{ bag:["USD","LBP"], counts:{}, expected:null, history:[], collapsed:[] },
@@ -253,7 +253,13 @@
   const signedWhole = (code, amount) => symPrefix(code) + whole(amount);
 
   /* ── the one money convention ────────────────────────────────────────────── */
-  const perUsd = (code) => (code === "XAU" || code === "XAG") ? state.metals[code] : state.rates[code];
+  // An optional street rate for the Lebanese pound (LBP per 1 USD). Off by default; when set it
+  // replaces the automatic LBP rate everywhere, and only that rate. Nothing saved is rewritten.
+  const lbpManualOn = () => state.lbpManual > 0;
+  const perUsd = (code) => {
+    if (code === "LBP" && lbpManualOn()) return state.lbpManual;
+    return (code === "XAU" || code === "XAG") ? state.metals[code] : state.rates[code];
+  };
 
   const convert = (value, from, to) => {
     const f = perUsd(from), t = perUsd(to);
@@ -351,6 +357,7 @@
         screen: state.screen,        chart: state.chart, count: state.count,
         rates: state.rates, metals: state.metals, updated: state.updated,
         metalMeta: state.metalMeta, cryptoAt: state.cryptoAt, sound: state.soundOn,
+        lbpManual: state.lbpManual,
       }));
       return true;
     } catch (e) { return false; }          // private mode: it still works, it just forgets
@@ -406,6 +413,7 @@
       if (s.cryptoAt && typeof s.cryptoAt === "object") state.cryptoAt = s.cryptoAt;
       if (s.updated) state.updated = s.updated;
       if (typeof s.sound === "boolean") state.soundOn = s.sound;
+      if (typeof s.lbpManual === "number" && s.lbpManual > 0 && Number.isFinite(s.lbpManual)) state.lbpManual = s.lbpManual;
     } catch (e) {
       // A parsed record whose shape throws is treated like an unreadable one: keep the bytes, stop
       // writing, say so. half-read data is not a recovery.
@@ -547,7 +555,8 @@
       : "—";
     // What matters is how old the numbers are, not which browser event fired last.
     if (state.reorder) { $("convertSub").textContent = "Drag a row up or down to move it."; return; }
-    $("convertSub").textContent = (fresh ? "Updated " : "Cached ") + when + " · " + state.order.length + " currencies · " + VERSION;
+    $("convertSub").textContent = (fresh ? "Updated " : "Cached ") + when + " · " + state.order.length + " currencies · " + VERSION
+      + (lbpManualOn() ? " · LBP manual " + state.lbpManual.toLocaleString("en-US") : "");
     const word = (f) => (f === null ? "age unknown" : f);
     const metalText = "gold " + word(metalFeedFor("XAU")) + " · silver " + word(metalFeedFor("XAG"));
     $("convertSource").textContent = navigator.onLine === false
@@ -894,6 +903,20 @@
     item("Reorder currencies", "drag to move", () => setReorder(true));
     item("Sound: " + (state.soundOn ? "on" : "off"), "key and row ticks", () => {
       state.soundOn = !state.soundOn; saveState(); toast("Sound " + (state.soundOn ? "on" : "off"));
+    });
+    item("Manual LBP rate", lbpManualOn() ? state.lbpManual.toLocaleString("en-US") + " · on" : "off, optional", () => {
+      openKeypad({
+        code: "LBP", title: "LBP per 1 USD", subtitle: "Manual rate",
+        initial: lbpManualOn() ? state.lbpManual : (state.rates.LBP ? Math.round(state.rates.LBP) : 0),
+        mode: "decimal", confirm: "Use this rate",
+        onCommit: (v) => {
+          if (!(v > 0)) { toast("The rate has to be more than zero"); return; }
+          state.lbpManual = v; saveState(); renderAll(); toast("Manual LBP rate on: " + v.toLocaleString("en-US"));
+        },
+      });
+    });
+    if (lbpManualOn()) item("Back to automatic LBP rate", "turn manual off", () => {
+      state.lbpManual = null; saveState(); renderAll(); toast("LBP rate is automatic again");
     });
     item("Refresh rates", state.live ? "live" : "cached", () => loadRates());
     item("Add gold and silver", state.order.includes("XAU") ? "in the list" : "spot, by the ounce", () => {
