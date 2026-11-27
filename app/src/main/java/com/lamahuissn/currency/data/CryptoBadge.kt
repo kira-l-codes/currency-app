@@ -9,7 +9,7 @@ object CryptoBadge {
         "DOT" to 0xFFD0107A, "LTC" to 0xFF5C6B7A, "BCH" to 0xFF2FA84F, "XLM" to 0xFF4A5560,
     )
 
-    fun isCoin(code: String): Boolean = Currencies.crypto.any { it.code == code }
+    fun isCoin(code: String): Boolean = CurrencyCatalog.crypto.any { it.code == code }
 
     fun colourOf(code: String): Long = colours[code] ?: 0xFF26262A
 
