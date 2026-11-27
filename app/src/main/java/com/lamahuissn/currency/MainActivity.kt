@@ -102,6 +102,7 @@ private fun Root(viewModel: AppViewModel = viewModel()) {
     var tab by remember { mutableStateOf(NavTab.Convert) }
     var addingCurrency by remember { mutableStateOf(false) }
     var keypadFor by remember { mutableStateOf<String?>(null) }
+    var editingLbp by remember { mutableStateOf(false) }
     var pickingPair by remember { mutableStateOf<String?>(null) }
 
     // The sheets keep their last subject while sliding out, so an exit animation has something to
@@ -115,9 +116,10 @@ private fun Root(viewModel: AppViewModel = viewModel()) {
 
     // Back dismisses what is open — sheet first, splash second — and only then leaves the app.
     BackHandler(
-        enabled = splashVisible || keypadFor != null || addingCurrency || pickingPair != null,
+        enabled = splashVisible || editingLbp || keypadFor != null || addingCurrency || pickingPair != null,
     ) {
         when {
+            editingLbp -> editingLbp = false
             keypadFor != null -> keypadFor = null
             addingCurrency -> addingCurrency = false
             pickingPair != null -> pickingPair = null
@@ -148,6 +150,8 @@ private fun Root(viewModel: AppViewModel = viewModel()) {
                     onReset = { viewModel.resetTargets() },
                     onRefresh = { viewModel.refresh() },
                     onToggleSound = { viewModel.toggleSound() },
+                    onManualLbp = { editingLbp = true },
+                    onClearManualLbp = { viewModel.setLbpManual(null) },
                     onSelectTab = { selected ->
                         tab = selected
                         if (selected == NavTab.Chart) viewModel.setChartPair(chart.base, chart.quote)
@@ -165,7 +169,7 @@ private fun Root(viewModel: AppViewModel = viewModel()) {
                 )
             } else {
                 CountScreen(
-                    rates = convert.usdTo,
+                    rates = convert.rates,
                     // A failed refresh leaves the cached table in place: the Count tab must say so
                     // rather than pretend a stale rate is today's.
                     ratesLive = convert.error == null && convert.usdTo.isNotEmpty(),
@@ -174,6 +178,19 @@ private fun Root(viewModel: AppViewModel = viewModel()) {
                     listState = countList,
                 )
             }
+        }
+
+        if (editingLbp) {
+            KeypadSheet(
+                code = "LBP",
+                title = "LBP per 1 USD",
+                initialAmount = convert.lbpManual ?: convert.usdTo["LBP"]?.let { Math.round(it).toDouble() } ?: 90_000.0,
+                onDismiss = { editingLbp = false },
+                onConvert = { rate ->
+                    if (rate > 0.0) viewModel.setLbpManual(rate)
+                    editingLbp = false
+                },
+            )
         }
 
         AnimatedVisibility(
