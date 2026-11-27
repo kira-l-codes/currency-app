@@ -60,3 +60,9 @@ and covered by tests, but only a real phone can confirm them. Report anything od
 - "Exact money" is not promised: values round-trip as typed within the display precision, but this
   is not a decimal-exact engine.
 - No license file yet.
+
+## Optional manual LBP rate (decided 2026-11-27)
+The owner asked for it after a friend pointed out that the street rate for the Lebanese pound differs
+from the automatic reference rate. It is a switch, never forced: off by default, one number (LBP per
+USD), shown clearly while on, kept apart from the automatic table so a refresh cannot overwrite it.
+It changes only LBP. No other currency, saved count or saved table is touched.
