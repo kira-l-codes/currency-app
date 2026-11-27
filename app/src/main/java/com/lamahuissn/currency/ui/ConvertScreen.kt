@@ -83,6 +83,8 @@ fun ConvertScreen(
     onReset: () -> Unit,
     onRefresh: () -> Unit,
     onToggleSound: () -> Unit,
+    onManualLbp: () -> Unit = {},
+    onClearManualLbp: () -> Unit = {},
     onSelectTab: (NavTab) -> Unit,
     listState: LazyListState = rememberLazyListState(),
 ) {
@@ -379,11 +381,19 @@ fun ConvertScreen(
                     } else {
                         "Sound: off" to { menuOpen = false; onToggleSound() }
                     },
+                    (if (state.lbpManual != null) "Manual LBP rate: on" else "Manual LBP rate: off") to
+                        { menuOpen = false; onManualLbp() },
                     "Sort A → Z" to { menuOpen = false; onSort(false) },
                     "Sort by value" to { menuOpen = false; onSort(true) },
                     "Refresh rates" to { menuOpen = false; onRefresh() },
                     "Restore default list" to { menuOpen = false; onReset() },
-                ),
+                ) + (if (state.lbpManual != null) {
+                    listOf<Pair<String, () -> Unit>>(
+                        "Back to automatic LBP rate" to { menuOpen = false; onClearManualLbp() },
+                    )
+                } else {
+                    emptyList()
+                }),
             )
         }
 
@@ -431,7 +441,8 @@ private fun statusLine(state: ConvertUi): String = when {
     state.error != null -> "Offline — showing the last saved rates"
     state.updatedAt > 0L -> {
         val time = SimpleDateFormat("HH:mm", Locale.US).format(Date(state.updatedAt))
-        "Updated $time · ${state.usdTo.size} currencies · v${BuildConfig.VERSION_NAME}"
+        "Updated $time · ${state.usdTo.size} currencies · v${BuildConfig.VERSION_NAME}" +
+            (state.lbpManual?.let { " · LBP manual ${java.text.NumberFormat.getIntegerInstance(Locale.US).format(it)}" } ?: "")
     }
     else -> "Rates load from open.er-api.com and CoinGecko"
 }
